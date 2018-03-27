@@ -57,7 +57,7 @@ if (!isset($delegate)) {
 //template
 $template="patientOrdoForm";
 
-$p['page']['ordo']=array('module'=>$module, 'ordoForm'=>'', 'porteur'=>$porteur);
+$p['page']['ordo']=array('module'=>$module, 'ordoForm'=>$ordoForm, 'porteur'=>$porteur);
 
 //patient
 $p['page']['patient']['id']=$_POST['patientID'];
