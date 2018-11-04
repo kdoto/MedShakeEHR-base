@@ -49,9 +49,13 @@ class msModBaseDataCourrier
     $atcd = new msCourrier();
     $atcd = $atcd->getExamenData($d['patientID'], 'baseATCD', 0);
     if(is_array($atcd)) {
-      $d=$d+$atcd;
+      foreach($atcd as $k=>$v) {
+        if(!in_array($k, array_keys($d))) $d[$k]=$v;
+      }
     }
-
+    // résoudre le problème potentiel de l'IMC
+    unset($d['imc']);
+    if(isset($d['poids'],$d['taillePatient'])) $d['imc']=msModMedgeCalcMed::imc($d['poids'],$d['taillePatient']);
   }
 
 /**
@@ -68,5 +72,17 @@ class msModBaseDataCourrier
       $d=$d+$atcd;
     }
   }
+
+  /**
+   * Ajouter des datas pour le modèle de courrier traitement en cours
+   * @param  array $d tableau des tags
+   * @return void
+   */
+    public static function getCourrierDataCompleteModuleModele_modeleCourrierTtEnCours(&$d) {
+      $lap = new msLapOrdo();
+      $lap->setToID($d['patientID']);
+      $d['tt']=$lap->getTTenCours();
+
+    }
 
 }

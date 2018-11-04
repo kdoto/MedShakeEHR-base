@@ -31,6 +31,12 @@ $debug='';
 
 $template="listing";
 
+// liste des documents pouvant être envoyés à la signature
+$docASigner = new msData;
+if($p['page']['modelesDocASigner']=$docASigner->getDataTypesFromCatName('catModelesDocASigner', ['id','name','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor'])) {
+  $docASigner->applyRulesOnlyforNotforOnArray($p['page']['modelesDocASigner'], $p['user']['id']);
+}
+
 if ($_POST['porp']=='patient' or $_POST['porp']=='externe' or $_POST['porp']=='today') {
     $formIN='baseListingPatients';
 } elseif ($_POST['porp']=='pro') {
@@ -45,6 +51,11 @@ $p['page']['porp']=$_POST['porp'];
 if ($form=msSQL::sqlUniqueChamp("select yamlStructure from forms where internalName='".$formIN."' limit 1")) {
     $form=Spyc::YAMLLoad($form);
 
+    $form['col0'] = array(
+      'head' => 'Identité',
+      'bloc' => array( 'identite')
+    );
+    ksort($form);
 
     //all type
     $col=count($form);
@@ -63,25 +74,14 @@ if ($form=msSQL::sqlUniqueChamp("select yamlStructure from forms where internalN
                   $listeTypes[$el[0]]=$typeID;
                   $el[0]=$typeID;
                 }
-
-                //order by
-                if ($i==1) {
-                    if($el[0] != 'titre') $orderby[]='c'.$el[0];
-                }
             }
         }
     }
+    $listeTypes['identite']=0;
     $listeTypes=array_unique($listeTypes);
 
-    foreach ($listeTypes as $type) {
-        $select[]= 'd'.$type.'.value as c'.$type;
-        $leftjoin[]='left join objets_data as d'.$type.' on d'.$type.'.toID=p.id and d'.$type.'.typeID='.$type.' and d'.$type.'.outdated=\'\'';
-    }
+    $mss=new msPeopleSearch;
 
-    //date de dc
-    $leftjoin[]='left join objets_data as dcd on dcd.toID=p.id and dcd.typeID='.msData::getTypeIDFromName('deathdate').' and dcd.outdated=\'\' and dcd.deleted=\'\'';
-
-    $where=null;
     if ($_POST['porp']=='today') {
         $agenda=new msAgenda();
         if ($p['config']['agendaNumberForPatientsOfTheDay']) {
@@ -91,62 +91,52 @@ if ($form=msSQL::sqlUniqueChamp("select yamlStructure from forms where internalN
         }
         $todays=$agenda->getPatientsOfTheDay();
         if (count($todays)) {
-            $where.=" and p.id in ('".implode("', '", array_column($todays, 'id'))."') ";
+            $mss->setWhereClause(" and p.id in ('".implode("', '", array_column($todays, 'id'))."') ");
         } else {
             return;
         }
     }
-    if (!empty($_POST['d2'])) {
-        $where.=" and ((d2.value like '".msSQL::cleanVar($_POST['d2'])."%' and d2.outdated='') or (d1.value like '".msSQL::cleanVar($_POST['d2'])."%' and d1.outdated='') ) ";
-    }
-    if (!empty($_POST['d3'])) {
-        $where.=" and d3.value like '".msSQL::cleanVar($_POST['d3'])."%' and d3.outdated='' ";
-    }
-    if (is_numeric($_POST['autreCrit']) and !empty($_POST['autreCritVal'])) {
-        $where.=" and d".msSQL::cleanVar($_POST['autreCrit']).".value like '".msSQL::cleanVar($_POST['autreCritVal'])."%'";
-        if(!in_array($_POST['autreCrit'], $listeTypes)) {
-          $select[]= 'd'.$_POST['autreCrit'].'.value as c'.$_POST['autreCrit'];
-          $leftjoin[]='left join objets_data as d'.$_POST['autreCrit'].' on d'.$_POST['autreCrit'].'.toID=p.id and d'.$_POST['autreCrit'].'.typeID='.$_POST['autreCrit'].' and d'.$_POST['autreCrit'].'.outdated=\'\'';
-        }
-    }
+
 
     //patient ou pro en fonction
     if($_POST['porp']=='pro') {
-        $peopleType=array('pro');
+        $mss->setPeopleType(['pro']);
     } elseif($_POST['porp']=='today') {
-        $peopleType=array('pro', 'patient', 'externe');
-        $p['page']['extToInt']=msSQL::sql2tabKey("SELECT od.toID, od.value 
+        $mss->setPeopleType(['pro', 'patient', 'externe']);
+        $p['page']['extToInt']=msSQL::sql2tabKey("SELECT od.toID, od.value
               FROM objets_data AS od left join data_types AS dt
               ON od.typeID=dt.id AND od.outdated='' AND od.deleted=''
               WHERE dt.name='relationExternePatient' and od.toID in ('".implode("', '", array_column($todays, 'id'))."')", 'toID', 'value');
-    } elseif (array_key_exists('PraticienPeutEtrePatient', $p['config']) and $p['config']['PraticienPeutEtrePatient']){
-        $peopleType=array('pro','patient');
+    } elseif (array_key_exists('PraticienPeutEtrePatient', $p['config']) and $p['config']['PraticienPeutEtrePatient'] == 'true'){
+        $mss->setPeopleType(['pro','patient']);
     } else {
-        $peopleType=array('patient');
+        $mss->setPeopleType(['patient']);
     }
 
-    $p['page']['sqlString']=$sql='select
-    CASE WHEN d2.value !="" THEN d2.value
-    WHEN d1.value !="" THEN d1.value
-    ELSE "(inconnu)"
-    END as nomtri, dcd.value as deathdate,
-    p.type, p.id as peopleID, '.implode(', ', $select).' from people as p '.implode(' ', $leftjoin). ' where p.type in ("'.implode('", "', $peopleType).'") '.$where.' order by trim(nomtri), c3  limit 50';
+    $criteres = array(
+        'firstname'=>$_POST['d3'],
+        'lastname'=>$_POST['d2'],
+        'birthname'=>$_POST['d2']
+      );
+    if(!empty($_POST['autreCritVal']) and $typeName=msData::getNameFromTypeID($_POST['autreCrit'])) {
+      $criteres[$typeName]=$_POST['autreCritVal'];
+    }
+    $mss->setCriteresRecherche($criteres);
+
+    $colRetour = array_merge(['deathdate'] ,array_keys($listeTypes));
+    $mss->setColonnesRetour($colRetour);
+
+    $p['page']['sqlString']=$sql=$mss->getSql();
 
     if ($data=msSQL::sql2tabKey($sql, 'peopleID')) {
-        for ($i=1;$i<=$col;$i++) {
-            $p['page']['outputTableHead'][$i]='<th';
+        for ($i=0;$i<=$col-1;$i++) {
             if (isset($form['col'.$i]['bloc'])) {
                 foreach ($form['col'.$i]['bloc'] as $v) {
                     $el=explode(',', $v);
-                    if(is_numeric($el[0])) {
-                      $id=$el[0];
-                    } else {
-                      $id=$listeTypes[$el[0]];
-                    }
-                    unset($el[0]);
+                    $id=$el[0];
 
                     //col number for type
-                    $modele['c'.$id]=$i;
+                    $modele[$id]=$i;
                     //separator
                     if (isset($form['col'.$i]['blocseparator'])) {
                         $separator[$i]=$form['col'.$i]['blocseparator'];
@@ -155,11 +145,11 @@ if ($form=msSQL::sqlUniqueChamp("select yamlStructure from forms where internalN
                     }
                     //class
                     if (count($el)>0) {
-                        $classadd['c'.$id]=implode(' ', $el);
+                        $classadd[$id]=implode(' ', $el);
                     }
                 }
             }
-            $p['page']['outputTableHead'][$i].='>'.$form['col'.$i]['head'].'</th>';
+            $p['page']['outputTableHead'][$i]=$form['col'.$i]['head'];
         }
 
         foreach ($data as $k=>$v) {

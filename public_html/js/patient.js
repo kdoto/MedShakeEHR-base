@@ -51,32 +51,94 @@ if (!scriptsList) {
   };
 }
 
+var goToDicom = false;
+
 $(document).ready(function() {
+  refreshHistorique();
+  $('.historiqueMedicalComplet .anneeHistorique').each(function(idx, el) {
+    if (!idx) {
+      $(el).find('.fa-minus-square').show();
+      $(el).find('.fa-plus-square').hide();
+      $($(el).attr('data-target')).collapse('show');
+    } else {
+      $(el).find('.fa-minus-square').hide();
+      $(el).find('.fa-plus-square').show();
+      $($(el).attr('data-target')).collapse('hide');
+    }
+  });
+  refreshHistoriqueToday();
+  ////////////////////////////////////////////////////////////////////////
+  ///////// Observations pour saut entre tabs
+
+  // rafraichir historique au retour dossier med
+  $('#ongletDossierMedical').on("show.bs.tab", function() {
+    getHistoriqueToday();
+    getHistorique();
+  });
+
+  //chargement/mise à jour tab Biométrie
+  $("#ongletGraph").on("click", function() {
+    getGraph();
+    getGraphCardio();
+  });
+
+  // 1er chargement tab dicom
+  $('#ongletDicom').on("show.bs.tab", function() {
+    if ($('#tabDicom').html() == '') {
+      var url = $('#tabDicom').attr('data-rootUrl');
+      loadTabPatient(url, 'tabDicom');
+    }
+  });
+
+  // refresh tabs dicom
+  $('body').on("click", "button.tabDicomRefresh", function() {
+    var url = $('#tabDicom').attr('data-rootUrl');
+    loadTabPatient(url, 'tabDicom');
+  });
+
+  $('#tabDicom').on("click", "#listeExamens tr.viewStudy", function() {
+    $.getScriptOnce(urlBase + "/js/dicom.js");
+    var url = '/patient/' + $('#identitePatient').attr("data-patientID") + '/tab/tabDicomStudyView/';
+    var param = {
+      'dcStudyID': $(this).attr('data-study')
+    };
+    loadTabPatient(url, 'tabDicom', param);
+  });
+
+  // 1er chargement tab relations patient
+  $('#ongletLiensPatient').on("show.bs.tab", function() {
+    $.getScriptOnce(urlBase + "/js/relations.js");
+    if ($('#tabLiensPatient').html() == '') {
+      var url = $('#tabLiensPatient').attr('data-rootUrl');
+      loadTabPatient(url, 'tabLiensPatient');
+    }
+  });
+
+
+  function loadTabPatient(url, tab, param) {
+    $.ajax({
+      url: urlBase + url,
+      type: 'post',
+      data: {
+        tab: tab,
+        param: param
+      },
+      dataType: "html",
+      success: function(data) {
+        $('#' + tab).html(data);
+      },
+      error: function() {
+        alert("Problème, rechargez la page !");
+      }
+    });
+  }
 
   ////////////////////////////////////////////////////////////////////////
   ///////// Observations pour sauvegarde automatique des champs modifiés
-  $(".changeObserv input:not(.datepic), .changeObserv textarea").typeWatch({
-    wait: 1000,
-    highlight: false,
-    allowSubmit: false,
-    captureLength: 1,
-    callback: function(value) {
-      patientID = $('#identitePatient').attr("data-patientID");
-      typeID = $(this).attr("data-typeID");
-      source = $(this);
-      instance = $(this).closest("form").attr("data-instance");
-      setPeopleData(value, patientID, typeID, source, instance);
-    }
 
-  });
-  $(".changeObserv select").on("change", function(e) {
-    patientID = $('#identitePatient').attr("data-patientID");
-    typeID = $(this).attr("data-typeID");
-    value = $(this).val();
-    source = $(this);
-    instance = $(this).closest("form").attr("data-instance");
-    setPeopleData(value, patientID, typeID, source, instance);
-  });
+  activeWatchChange('.changeObserv');
+  activeWatchChange('.changeObservByTypeName');
+
   $(".datepick").on("dp.change", function(e) {
     patientID = $('#identitePatient').attr("data-patientID");
     typeID = $(this).children('input').attr("data-typeID");
@@ -87,23 +149,117 @@ $(document).ready(function() {
     setPeopleData(value, patientID, typeID, source, instance);
   });
 
-  $('input.jqautocomplete').on("autocompletechange", function(event, ui) {
+  $('input.jqautocomplete').on("autocompleteselect", function(event, ui) {
     $(this).trigger("paste");
   });
 
   ////////////////////////////////////////////////////////////////////////
+  ///////// Observations touch pour vue mobile
+  $('.swipable').swipe({
+    triggerOnTouchEnd: true,
+    swipeStatus: function(event, phase, direction, distance) {
+      if (!$('.swipable').hasClass('swipableon'))
+        return;
+      if (phase == 'move') {
+        if (direction == 'left' && $('.swipable').hasClass('swipable-left')) {
+          $('.swipable').css('overflow-y', 'hidden');
+          $('.atcd').css('left', -distance);
+          $('.dossier').show().css('left', $(window).width() - distance).css('top', -$('.atcd')[0].offsetHeight);
+        } else if (direction == 'right' && $('.swipable').hasClass('swipable-right')) {
+          $('.swipable').css('overflow-y', 'hidden');
+          $('.atcd').show().css('left', -$(window).width() + distance);
+          $('.dossier').css('left', distance).css('top', -$('.atcd')[0].offsetHeight);
+        }
+      } else if (phase == 'cancel') {
+        if (direction == 'left' && $('.swipable').hasClass('swipable-left')) {
+          $('.atcd').animate({
+            left: 0
+          }, 400);
+          $('.dossier').animate({
+            left: $(window).width()
+          }, 400, function() {
+            $('.dossier').hide().css('top', 0);
+          });
+        } else if (direction == 'right' && $('.swipable').hasClass('swipable-right')) {
+          $('.atcd').animate({
+            left: -$(window).width()
+          }, 400, function() {
+            $('.atcd').hide();
+            $('.swipable').css('overflow-y', 'auto')
+          });
+          $('.dossier').animate({
+            left: 0
+          }, 400, function() {
+            $('.dossier').css('top', 0)
+          });
+        }
+      } else if (phase == 'end') {
+        if (direction == 'left' && $('.swipable').hasClass('swipable-left')) {
+          $('.atcd').animate({
+            left: -$(window).width()
+          }, 400, function() {
+            $('.atcd').hide();
+            $('.swipable').removeClass('swipable-left').addClass('swipable-right');
+            $('.swipable').css('overflow-y', 'auto')
+          });
+          $('.dossier').animate({
+            left: 0
+          }, 400, function() {
+            $('.dossier').css('top', 0)
+          });
+        } else if (direction == 'right' && $('.swipable').hasClass('swipable-right')) {
+          $('.atcd').animate({
+            left: 0
+          }, 400);
+          $('.dossier').animate({
+            left: $(window).width()
+          }, 400, function() {
+            $('.dossier').hide().css('top', 0);
+            $('.swipable').removeClass('swipable-right').addClass('swipable-left');
+            $('.swipable').css('overflow-y', 'auto')
+          });
+        }
+      }
+    },
+    allowPageScroll: 'vertical',
+    preventDefaultEvents: false,
+    threshold: 100
+  });
+  if (window.innerWidth < 768) {
+    $('.swipable').addClass('swipableon swipable-right');
+    $('.atcd').hide();
+    $('.dossier').show();
+  } else {
+    $('.atcd').show();
+    $('.dossier').show();
+  };
+  $(window).on("resize", function() {
+    if (window.innerWidth < 768) {
+      if (!$('.swipable').hasClass('swipableon')) {
+        $('.swipable').addClass('swipableon swipable-right');
+        $('.atcd').hide();
+        $('.dossier').show();
+      }
+    } else {
+      $('.swipable').removeClass('swipableon').removeClass('swipable-right').removeClass('swipable-left');
+      $('.atcd').show().css('left', '');
+      $('.dossier').show().css('left', '').css('top', '');
+    }
+  });
+
+  ////////////////////////////////////////////////////////////////////////
   ///////// Observations DICOM
-  $("a.prepareEcho").on("click", function(e) {
+  $("body").on("click", ".prepareEcho", function(e) {
     e.preventDefault();
     prepareEcho();
   });
-  if (typeof(dicomAutoSendPatient2Echo) != "undefined") {
-    if (dicomAutoSendPatient2Echo == true) {
-      prepareEcho();
+  if (typeof(dicomAutoSendPatient) != "undefined") {
+    if (dicomAutoSendPatient == true) {
+      prepareEcho('nopopup');
     }
   }
 
-  $("a.catchLastDicomSrData").on("click", function(e) {
+  $(".catchLastDicomSrData").on("click", function(e) {
     e.preventDefault();
     catchLastDicomSrData();
   });
@@ -122,8 +278,9 @@ $(document).ready(function() {
 
   ////////////////////////////////////////////////////////////////////////
   // prépare la réception de documents par phonecapture
-  $("a.prepareReceptionDoc").on("click", function(e) {
+  $("body").on("click", ".prepareReceptionDoc", function(e) {
     e.preventDefault();
+    goToDicom = $(this).hasClass('dicom') ? true : false;
     $.ajax({
       url: urlBase + '/patient/ajax/' + ($(this).hasClass('dicom') ? 'prepareEcho/' : 'prepareReceptionDoc/'),
       type: 'post',
@@ -132,15 +289,24 @@ $(document).ready(function() {
       },
       dataType: "html",
       success: function(data) {
-          $("#patientPhonecapture").modal('show');
+        $("#patientPhonecapture").modal('show');
       },
       error: function() {
-        alert('Problème, rechargez la page !');
+        alert_popup("danger", 'Problème, rechargez la page !');
+
       }
     });
   });
 
-  $("#patientPhonecapture button").on("click", function(){
+  $("#patientPhonecapture button").on("click", function() {
+    if (goToDicom) {
+      $('#ongletDicom')[0].click();
+      if ($('#tabDicom').html() != '') {
+        var url = $('#tabDicom').attr('data-rootUrl');
+        loadTabPatient(url, 'tabDicom');
+      }
+      return;
+    }
     getHistorique();
     getHistoriqueToday();
   });
@@ -149,7 +315,7 @@ $(document).ready(function() {
   ///////// Observations déclenchement actions d'injections dans la page
 
   //bouton de nouvelle consultation
-  $("body").on("click", "button.newCS, a.newCS", function(e) {
+  $("body").on("click", ".addNewCS, .editCS", function(e) {
     e.preventDefault();
     if ($('#nouvelleCs').html() != '') {
       if (confirm('Voulez-vous remplacer le contenu de la consultation en cours ?')) {
@@ -161,8 +327,9 @@ $(document).ready(function() {
   });
 
   //bouton de nouveau courrier
-  $("a.newCourrier").on("click", function(e) {
+  $("body").on("click", ".newCourrier", function(e) {
     e.preventDefault();
+    $('#ongletDossierMedical').tab('show');
     if ($('#newCourrier').html() != '') {
       if (confirm('Voulez-vous remplacer le contenu du courrier en cours ?')) {
         $("#editeurCourrier").tinymce().remove();
@@ -174,7 +341,7 @@ $(document).ready(function() {
   });
 
   //bouton de nouvelle ordo
-  $('body').on("click", "#linkAddNewOrdo, .editOrdo", function(e) {
+  $('body').on("click", ".addNewOrdo, .editOrdo", function(e) {
     e.preventDefault();
     if ($('#newOrdo').html() != '') {
       if (confirm('Voulez-vous remplacer le contenu de la zone d\'ordonnance en cours ?')) {
@@ -206,7 +373,7 @@ $(document).ready(function() {
   });
 
   //bouton de nouveau reglement
-  $('body').on("click", "#linkAddNewReglement, .editReglement", function(e) {
+  $('body').on("click", ".addNewReglement, .editReglement", function(e) {
     e.preventDefault();
     if ($('#newReglement').html() != '') {
       if (confirm('Voulez-vous remplacer le contenu de la zone de règlement en cours ?')) {
@@ -217,11 +384,38 @@ $(document).ready(function() {
     }
   });
 
+  // bouton de nouvelle transmission
+  $('body').on("click", ".newTransmission", function(e) {
+    e.preventDefault();
+
+    if($(this).parents('tr').attr('data-creationDate')) {
+      $('#transSujet').val("Pièce du dossier patient");
+      datepiece = $(this).parents('tr').attr('data-creationDate');
+      datepiece = moment(datepiece).format('DD/MM/YYYY HH:mm');
+      texte = "Voir la ligne de l'historique \"" + $(this).parents('td').next('td').text() + '" du ' + datepiece;
+      texte = texte.replace(/\r?\n|\r/g,"");
+      texte = texte.replace(/  +/g, ' ');
+      $('#transTransmission').val(texte);
+    }
+    $('#transConcerne').addClass('d-none');
+    $('#transPatientConcID').val($('#identitePatient').attr('data-patientid'));
+    $('#transPatientConcSel').html($('#identitePatient').attr('data-patientIdentite'));
+    $('#transPatientConcSel').removeClass('d-none');
+
+    $('#modalTransmission').modal('show');
+  });
+  // poster une transmission
+  $('body').on("click", "#transmissionEnvoyer", function(e) {
+    e.preventDefault();
+    transmissionNewNextLocation = 'stayHere';
+    posterTransmission();
+  });
+
   ////////////////////////////////////////////////////////////////////////
   ///////// Observations fermeture actions non terminées
 
   //close button zone newCS
-  $('body').on("click", "#cleanNewCS", function(e) {
+  $('body').on("click", "#cleanNewCS, .addNewCS", function(e) {
     $('#nouvelleCs').html('');
     $(window).unbind("beforeunload");
   });
@@ -229,9 +423,20 @@ $(document).ready(function() {
   ////////////////////////////////////////////////////////////////////////
   ///////// Observations spécifiques aux lignes de l'historique  (dont modal)
 
+  // contraction d'une année
+
+  $("body").on("click", ".anneeHistorique", function() {
+    setTimeout((function($el) {
+      if ($el.hasClass('collapsed'))
+        $el.find('.fa-minus-square').hide() && $el.find('.fa-plus-square').show();
+      else
+        $el.find('.fa-minus-square').show() && $el.find('.fa-plus-square').hide()
+    }), 200, $(this));
+  });
+
   //sélectionner un groupe dans l'historique
 
-  $("body").on("click", "#historiqueTypeSelect button", function(e) {
+  $("body").on("click change", "#historiqueTypeSelect button, #historiqueTypeSelect option", function(e) {
     e.preventDefault();
     groupe = $(this).attr('data-groupe');
     //boutons
@@ -243,8 +448,7 @@ $(document).ready(function() {
     if (groupe != 'tous') {
       $('.historiqueMedicalComplet tr.trLigneExamen').hide();
       $('.historiqueMedicalComplet tr[data-groupe="' + groupe + '"]').show();
-    } 
-    else {
+    } else {
       $('.historiqueMedicalComplet tr.trLigneExamen').show();
 
     }
@@ -252,13 +456,13 @@ $(document).ready(function() {
   });
 
   //toogle importance d'une ligne
-  $('body').on("click", "a.toogleImportant", function(e) {
+  $('body').on("click", ".toggleImportant", function(e) {
     e.preventDefault();
     toogleImportant($(this));
   });
 
   //supprimer une ligne de l'historique
-  $("body").on("click", "a.suppCs", function(e) {
+  $("body").on("click", ".suppCs", function(e) {
     e.preventDefault();
     if (confirm('Confirmez-vous la demande de suppression ?')) {
       suppCs($(this));
@@ -273,7 +477,7 @@ $(document).ready(function() {
     $('#alternatTitreModal #titreActu').val(titreActu);
     $('#alternatTitreModal #objetID').val(objetID);
   })
-  $('body').on('dblclick', '.trLigneExamen td', function() {
+  $('body').on('dblclick', '.trLigneExamen td:nth-child(4)', function() {
     $('#alternatTitreModal').modal('show');
     titreActu = $(this).closest('tr').attr('data-alternatTitre');
     objetID = $(this).closest('tr').attr('data-objetID');
@@ -295,6 +499,32 @@ $(document).ready(function() {
     }
   });
 
+  //voir le détail sur un ligne: clic sur titre ou pour document, clic sur oeil
+  $("body").on('click', '.trLigneExamen', function(e) {
+    if (!$(e.target).hasClass('dropdown-item') && !$(e.target).hasClass('btn') && !$(e.target.parentNode).hasClass('btn')) {
+      e.preventDefault();
+      showObjetDet($(this));
+    }
+  });
+
+  $("body").on('click', '.showDetDoc', function(e) {
+    e.preventDefault();
+    showObjetDet($(this));
+  });
+
+  // voir étude dicom correspondant à l'examen
+  $('#tabDossierMedical').on("click", "a.viewStudy", function(e) {
+    e.preventDefault();
+    $.getScriptOnce(urlBase + "/js/dicom.js");
+    var url = '/patient/' + $('#identitePatient').attr("data-patientID") + '/tab/tabDicomStudyView/';
+    var param = {
+      'dcStudyID': $(this).attr('data-study')
+    };
+    $('#ongletDicom').tab('show');
+    loadTabPatient(url, 'tabDicom', param);
+
+  });
+
   ////////////////////////////////////////////////////////////////////////
   // gestion des historiques et courbes de poids/taille/imc
 
@@ -308,51 +538,33 @@ $(document).ready(function() {
   $(".graph").parent().attr("title", "Voir l'historique").css("cursor", "pointer");
 
   //stupide table pour classer tableau de la modal
-  $("table.histo").stupidtable();
   $("table.histo").on("aftertablesort", function(event, data) {
     th = $(this).find("th");
     th.find(".arrow").remove();
     dir = $.fn.stupidtable.dir;
-    arrow = data.direction === dir.ASC ? "glyphicon-chevron-up" : "glyphicon-chevron-down";
-    th.eq(data.column).append(' <span class="arrow glyphicon ' + arrow + '"></span>');
+    arrow = data.direction === dir.ASC ? "fa-chevron-up" : "fa-chevron-down";
+    th.eq(data.column).append(' <span class="arrow fa ' + arrow + '"></span>');
   });
 
-  //modal Courbes de poids/taille/IMC
-  $(".graph").parent().on("click", function() {
-    $(".histo-suppr").remove();
-    $.ajax({
-      url: urlBase + '/patient/ajax/getGraphData/',
-      type: 'post',
-      data: {
-        patientID: $('#identitePatient').attr("data-patientID")
-      },
-      dataType: "html",
-      success: function(data) {
-        if (data == 'ok')
-          return;
-        data = JSON.parse(data);
-        for (var i in data)
-          if (i != 'bornes')
-            $("table.histo tbody").append('\
-              <tr class="histo-suppr">\
-                <td data-sort-value="' + i + '" style="text-align:center">' + (i < 3 * 365.25 ? ((i * 24 / 365.25) >> 1) + ' mois' : ((i * 2 / 365.25) >> 1) + ' ans') + '</td>\
-                <td style="text-align:center">' + moment(data[i].date, "YYYY-MM-DD HH:mm:ss").format("DD/MM/YYYY") + '</td>\
-                <td style="text-align:center;color:' + (data[i].poids.reel ? 'black' : 'grey') + '">' + data[i].poids.value + '</td>\
-                <td style="text-align:center;color:' + (data[i].taille.reel ? 'black' : 'grey') + '">' + data[i].taille.value + '</td>\
-                <td style="text-align:center;color:' + (data[i].imc.reel ? 'black' : 'grey') + '">' + data[i].imc.value + '</td>\
-              </tr>');
-        drawGraph(data);
-        $('#viewGraph').modal('show');
-      },
-      error: function() {}
-    });
+  //choix de l'année pour les data cardio
+  $('#tabGraph').on("change", "#selectAnneeHistoBiometrieCardio", function() {
+    year = $("#selectAnneeHistoBiometrieCardio option:selected").text();
+    getGraphCardio(year);
   });
 
+  ////////////////////////////////////////////////////////////////////////
+  ///////// Observations diverses dont celles concernant la partie identité patient
 
-  //voir le détail sur un ligne: clic sur titre ou pour document, clic sur oeil
-  $("body").on('click', '.trLigneExamen td:nth-child(3), a.showDetDoc', function(e) {
+  //Voir les notes sur le patient
+  $('body').on("click", "#voirNotesPatient", function(e) {
     e.preventDefault();
-    showObjetDet($(this));
+    $('#notesPatient').toggle();
+  });
+
+  //Editer relation patient
+  $('body').on("click", "button.editerRelationsPatient", function(e) {
+    e.preventDefault();
+    $('#ongletLiensPatient').tab('show');
   });
 
   //fermeture modal data admin patient
@@ -360,34 +572,47 @@ $(document).ready(function() {
     ajaxModalPatientAdminCloseAndRefreshHeader();
   });
 
-  ////////////////////////////////////////////////////////////////////////
-  ///////// Voir les notes sur le patient
-  $('body').on("click", "#voirNotesPatient", function(e) {
+  //Ouvrir le LAP
+  $('body').on("click", ".openLAP", function(e) {
     e.preventDefault();
-    $('#notesPatient').toggle();
+    $('#ongletLAP').tab('show');
   });
 
   ////////////////////////////////////////////////////////////////////////
   ///////// Changer la date de création d'une ligne d'historique
 
   // datepicker bootstrap
-  $('#datepickHisto').datetimepicker({
-    locale: 'fr',
-    format: 'Y-MM-DD HH:mm:ss',
-    sideBySide: true
-  });
+  $('#datepickHisto')
+    .on("click", function() {
+      $(this).data("DateTimePicker").toggle();
+    })
+    .datetimepicker({
+      locale: 'fr',
+      format: 'Y-MM-DD HH:mm:ss',
+      sideBySide: true,
+      icons: {
+        time: 'far fa-clock',
+        date: 'fa fa-calendar',
+        up: 'fa fa-chevron-up',
+        down: 'fa fa-chevron-down',
+        previous: 'fa fa-chevron-left',
+        next: 'fa fa-chevron-right',
+        today: 'fa fa-crosshairs',
+        clear: 'fa fa-trash',
+        close: 'fa fa-times'
+      }
+    });
 
+  $('body').on('dblclick', '.trLigneExamen td:nth-child(2)', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    groupe = $(this).closest('tr').attr('data-groupe');
+    if (groupe == 'typecs' || groupe == 'reglement') changeCreationDate($(this));
+  });
   $("body").on("click", ".changeCreationDate", function(e) {
     e.preventDefault();
-    objetID = $(this).closest('tr').attr('data-objetID');
-    registerDate = $(this).closest('tr').attr('data-registerDate');
-    creationDate = $(this).closest('tr').attr('data-creationDate');
-
-    $("#modalCreationDate input[name='objetID']").val(objetID);
-    $("#modalRegisterDateDisplay").html(registerDate);
-    $("#modalCreationDateDisplay").html(creationDate);
-    $("#modalCreationDate input[name='newCreationDate']").val(creationDate);
-    $("#modalCreationDate").modal('show');
+    e.stopPropagation();
+    changeCreationDate($(this));
   });
 
   $("body").on("click", ".modalCreationDateClose", function(e) {
@@ -400,41 +625,16 @@ $(document).ready(function() {
       success: function(data) {
         if (data.indexOf("Erreur:") == 0) {
           $("#errormessage").html(data);
-          $(".submit-error").animate({
-            top: "50px"
-          }, 300, "easeInOutCubic", function() {
-            setTimeout((function() {
-              $(".submit-error").animate({
-                top: "0"
-              }, 300)
-            }), 4000)
-          });
+          alert_popup("danger", data);
         } else if (data.indexOf("Avertissement:") == 0) {
-          $("#warningmessage").html(data);
-          $(".submit-warning").animate({
-            top: "50px"
-          }, 300, "easeInOutCubic", function() {
-            setTimeout((function() {
-              $(".submit-warning").animate({
-                top: "0"
-              }, 300)
-            }), 4000)
-          });
+          alert_popup("warning", data);
         } else {
           getHistorique();
           getHistoriqueToday();
         }
       },
       error: function() {
-        $(".submit-error").animate({
-          top: "50px"
-        }, 300, "easeInOutCubic", function() {
-          setTimeout((function() {
-            $(".submit-error").animate({
-              top: "0"
-            }, 300)
-          }), 4000)
-        });
+        alert_popup("danger", "Une erreur s'est produite durant l'enregistrement des données");
       }
     });
   });
@@ -444,69 +644,84 @@ $(document).ready(function() {
   ///////// Envoyer les formulaires et recharger l'historique
 
   //enregistrement de forms en ajax
-  $('body').on('click', "form input[type=submit],button[type=submit]", function(e) {
+  $('body').on('click', "#tabDossierMedical form input[type=submit], #tabDossierMedical button[type=submit]", function(e) {
     if ($(this).closest("form").attr("action").indexOf('/actions/') >= 0) {
       return;
     };
     e.preventDefault();
+    var stop = false;
+    $(this).closest("form").find('input[required],textarea[required]').each(function(idx, el) {
+      if (el.value == '') {
+        glow('danger', $(el));
+        stop = true;
+      }
+    });
+    if (stop) {
+      alert_popup("warning", "Certains champs requis n'ont pas été remplis.");
+      return;
+    }
     $(window).unbind("beforeunload");
     $(this).closest(".toclear").html("");
+    var form = $(this).closest("form");
+    var objetid = form.find("input[name=objetID]").val();
     $.ajax({
-      url: $(this).closest("form").attr("action"),
+      url: form.attr("action"),
       type: 'post',
-      data: $(this).closest("form").serialize(),
+      data: form.serialize(),
       dataType: "html",
       success: function(data) {
-        if (!data.length)
+        // on recharge la colonne lat
+        getLatCol();
+
+        // on agit sur historiques
+        if (!data.length || form.hasClass('ignoreReturn')) {
           return;
-        else if (data.substr(0, 7) == "Erreur:") {
-          $("#errormessage").html(data);
-          $(".submit-error").animate({
-            top: "50px"
-          }, 300, "easeInOutCubic", function() {
-            setTimeout((function() {
-              $(".submit-error").animate({
-                top: "0"
-              }, 300)
-            }), 4000)
-          });
+        } else if (data.substr(0, 7) == "Erreur:") {
+          alert_popup("danger", data);
         } else if (data.substr(0, 14) == "Avertissement:") {
-          $("#warningmessage").html(data);
-          $(".submit-warning").animate({
-            top: "50px"
-          }, 300, "easeInOutCubic", function() {
-            setTimeout((function() {
-              $(".submit-warning").animate({
-                top: "0"
-              }, 300)
-            }), 4000)
-          });
+          alert_popup("warning", data);
         } else {
-          var $tr = $("#historique .anneeHistorique");
-          if ($tr.length) {
-            if ($($tr[0]).children("td").html().substr(8, 4) == moment().format("YYYY"))
-              $($tr[0]).after(data);
+          var $tr = $("#historique .anneeHistorique:nth-child(1)");
+          if ($tr.length && $tr.children("td:nth-child(2)").html().substr(8, 4) == moment().format("YYYY")) {
+            $tr.find('.fa-minus-square').show();
+            $tr.find('.fa-plus-square').hide();
+            $($tr.attr('data-target')).collapse('show');
+            var $l = $("#historique tr.tr" + objetid);
+            if (objetid && $l.length)
+              $l.replaceWith(data);
             else
-              $($tr[0]).before('<tr class="anneeHistorique"><td colspan="5" class="bg-primary"><strong>' + moment().format("YYYY") + '</strong></td></tr>' + data);
-          } else
-            getHistorique();
-          $tr = $("#historiqueToday .trLigneExamen");
-          if ($tr.length)
-            $($tr[0]).before(data);
-          else
-            getHistoriqueToday();
+              $tr.after(data);
+          } else {
+            $('#historique tbody').prepend('<tr class="anneeHistorique table-primary" data-toggle="collapse" data-target=".historiqueMedicalComplet .trLigneExamen[data-annee=' + moment().format("YYYY") + ']" aria-expanded="true" aria-controls="annee' + moment().format("YYYY") + '">\
+              <td class="pl-3">\
+                <span class="far fa-minus-square"></span>\
+                <span class="far fa-plus-square" style="display:none"></span>\
+              </td>\
+              <td colspan="4"><strong>' + moment().format("YYYY") + '</strong></td>\
+            </tr>' + data);
+            var regdate = $('#historique tr:nth-of-type(2)').attr('data-registerdate');
+            $('#historique tr:nth-of-type(2) > td:nth-of-type(2) > span.d-none').html(regdate.substr(0, 10));
+            $('#historique tr:nth-of-type(2) > td:nth-of-type(2) > span.d-md-none').html(regdate.substr(0, 5));
+            refreshHistorique();
+          }
+
+          var $lt = $("#historiqueToday tr.tr" + objetid);
+          if (objetid && $lt.length)
+            $lt.replaceWith(data);
+          else {
+            $('#historiqueToday tbody').prepend(data);
+            if ($('#historiqueToday tbody tr:nth-of-type(1)').attr('data-registerdate').substr(0, 10) != moment().format("YYYY-MM-DD"))
+              $('#historiqueToday tbody tr:nth-of-type(1)').remove();
+          }
+          var regdatet = $('#historiqueToday tbody tr:nth-of-type(1)').attr('data-registerdate');
+          $('#historiqueToday tbody tr:nth-of-type(1) > td:nth-of-type(2) > span.d-none').html(regdatet.substr(11));
+          $('#historiqueToday tbody tr:nth-of-type(1) > td:nth-of-type(2) > span.d-md-none').html(regdatet.substr(11, 5));
+          refreshHistoriqueToday();
+          scrollTo('body', 2);
         }
       },
       error: function() {
-        $(".submit-error").animate({
-          top: "50px"
-        }, 300, "easeInOutCubic", function() {
-          setTimeout((function() {
-            $(".submit-error").animate({
-              top: "0"
-            }, 300)
-          }), 4000)
-        });
+        alert_popup("danger", "Une erreur s'est produite durant l'enregistrement des données.");
       }
     });
   });
@@ -537,12 +752,13 @@ function listePatientDicomStudies() {
       $('#listeDicomStudiesModal').modal('show');
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
 
-function prepareEcho() {
+function prepareEcho(mode) {
 
   $.ajax({
     url: urlBase + '/patient/ajax/prepareEcho/',
@@ -552,10 +768,11 @@ function prepareEcho() {
     },
     dataType: "html",
     success: function(data) {
-
+      if (mode != 'nopopup') alert_popup("success", 'L\'appareil d\'imagerie est maintenant correctement configuré');
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -575,7 +792,8 @@ function catchLastDicomSrData() {
       }
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -597,7 +815,8 @@ function catchOtherDicomSrData() {
       $('#listeDicomStudiesModal').modal('toggle');
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -642,7 +861,7 @@ function sendFormToCsDiv(el) {
       $.getScriptOnce(urlBase + "/js/module/formsScripts/" + el.attr('data-formtocall') + ".js");
       scrollTo(scrollDestination.nouvelleCs, scrollDestination.delai);
       // pour éviter de perdre des données
-      if (el.attr('data-mode') != 'copy')
+      if (el.attr('data-mode') != 'view')
         $(window).on("beforeunload", preventDataLoss);
       $('form').submit(function() {
         $(window).unbind("beforeunload");
@@ -650,7 +869,8 @@ function sendFormToCsDiv(el) {
 
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -671,7 +891,7 @@ function sendFormToCourrierDiv(el) {
     data: {
       patientID: $('#identitePatient').attr("data-patientID"),
       objetID: el.attr('data-objetID'),
-      modeleID: el.attr('data-modeleID'),
+      modele: el.attr('data-modele'),
     },
     dataType: "html",
     success: function(data) {
@@ -690,7 +910,8 @@ function sendFormToCourrierDiv(el) {
       });
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -704,6 +925,7 @@ function sendFormToOrdoDiv(el) {
     url: urlBase + '/patient/ajax/extractOrdoForm/',
     type: 'post',
     data: {
+      asUserID: el.hasClass('editOrdo') && el.closest('tr').attr('data-asuserid') != undefined ? el.closest('tr').attr('data-asuserid') : null,
       objetID: el.hasClass('editOrdo') ? el.closest('tr').attr('data-objetID') : null,
       patientID: $('#identitePatient').attr("data-patientID"),
       parentID: '',
@@ -725,7 +947,8 @@ function sendFormToOrdoDiv(el) {
       });
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -755,7 +978,8 @@ function sendFormToMailDiv(el) {
       });
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
@@ -769,6 +993,7 @@ function sendFormToReglementDiv(el) {
     url: urlBase + '/patient/ajax/extractReglementForm/',
     type: 'post',
     data: {
+      asUserID: el.attr('data-asuserid') != undefined ? el.attr('data-asUserID') : null,
       objetID: el.hasClass('editReglement') ? el.closest('tr').attr('data-objetID') : null,
       patientID: $('#identitePatient').attr("data-patientID"),
       reglementForm: el.attr('data-reglementForm'),
@@ -779,11 +1004,19 @@ function sendFormToReglementDiv(el) {
     dataType: "html",
     success: function(data) {
       $('#newReglement').html(data);
-      $.getScriptOnce(urlBase + "/js/patientScripts/" + scriptsList.reglement);
+      if($.isArray(scriptsList.reglement)) {
+        $.each(scriptsList.reglement, function(index, value) {
+          $.getScriptOnce(urlBase + "/js/patientScripts/" + value);
+        });
+      } else {
+        $.getScriptOnce(urlBase + "/js/patientScripts/" + scriptsList.reglement);
+      }
       if (el.hasClass('editReglement')) {
         //reinjection pour édition
         $(".regleTarifCejour").attr('data-tarifdefaut', $(".regleTarifCejour").val());
-        $(".regleDepaCejour").attr('data-tarifdefaut',$(".regleDepaCejour").val());
+        $(".regleDepaCejour").attr('data-tarifdefaut', $(".regleDepaCejour").val());
+        // Non car change param antérieur ... à revoir
+        //setTimeout(function() { searchAndInsertActeData($("#newReglement select.selectActeStarter option[selected='selected']").parent('select')); }, 500);
       }
       scrollTo(scrollDestination.newReglement, scrollDestination.delai);
       $(window).on("beforeunload", preventDataLoss);
@@ -792,124 +1025,19 @@ function sendFormToReglementDiv(el) {
       });
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 }
 
 ////////////////////////////////////////////////////////////////////////
-/////////Fonctions spécifiques aux lignes de l'historique  (dont modal)
+/////////Fonctions spécifiques aux header dossier patient
 
-//supprimer une ligne de l'historique
-function suppCs(el) {
-  objetID = el.attr('data-objetID');
-
-  $.ajax({
-    url: urlBase + '/patient/ajax/suppCs/',
-    type: 'post',
-    data: {
-      objetID: objetID
-    },
-    dataType: "json",
-    success: function() {
-      $('.tr' + objetID).remove();
-      getHistorique();
-      getHistoriqueToday();
-    },
-    error: function() {
-      alert('Problème, rechargez la page !');
-    }
-  });
-}
-
-// toggle importance d'une ligne
-function toogleImportant(el) {
-  importanceActu = el.attr('data-importanceActu');
-  objetID = el.attr('data-objetID');
-
-  $.ajax({
-    url: urlBase + '/patient/ajax/importanceCsToogle/',
-    type: 'post',
-    data: {
-      importanceActu: importanceActu,
-      objetID: objetID
-    },
-    dataType: "html",
-    success: function() {
-      if (importanceActu == 'n') {
-        el.html('N\'est plus important');
-        el.attr('data-importanceActu', 'y');
-        $('.icoImportant' + objetID).html('<span class="glyphicon glyphicon-flash" aria-hidden="true"></span>');
-      }
-      if (importanceActu == 'y') {
-        $('.icoImportant' + objetID).html('');
-        el.html('Rendre important');
-        el.attr('data-importanceActu', 'n');
-      }
-    },
-    error: function() {
-      alert('Problème, rechargez la page !');
-    }
-  });
-}
-
-// compléter le titre avec la modal
-function modalAlternateTitreChange() {
-  titreActu = $('#alternatTitreModal #titreActu').val();
-  objetID = $('#alternatTitreModal #objetID').val();
-
-  $.ajax({
-    url: urlBase + '/patient/ajax/completerTitreCs/',
-    type: 'post',
-    data: {
-      titre: titreActu,
-      objetID: objetID
-    },
-    dataType: "html",
-    success: function() {
-      $('.alternatTitre' + objetID).html(' : ' + titreActu);
-      $('#alternatTitreModal').modal('toggle');
-    },
-    error: function() {
-      alert('Problème, rechargez la page !');
-    }
-  });
-}
-
-// voir le détail d'une ligne d'historique
-function showObjetDet(element) {
-  zone = element.closest('table').attr('data-zone');
-  objetID = element.closest('tr').attr('data-objetID');
-  ligne = element.closest('tr');
-  destination = $("." + zone + " .detObjet" + objetID);
-
-  if (destination.length == 0) {
-    ligne.after('<tr class="detObjet' + objetID + ' detObjet" style="background : transparent"></tr>');
-    destination = $("." + zone + " .detObjet" + objetID);
-
-    $.ajax({
-      url: urlBase + '/patient/ajax/ObjetDet/',
-      type: 'post',
-      data: {
-        objetID: objetID,
-      },
-      dataType: "html",
-      success: function(data) {
-        destination.html(data);
-      },
-      error: function() {
-        destination.remove();
-        alert('Problème, rechargez la page !');
-      }
-    });
-
-  } else {
-    destination.toggle();
-  }
-
-}
-
-// rafraichier le header du dossier patient (infos administratives)
+/**
+ * Rafraichir le header du dossier patient
+ * @return {void}
+ */
 function ajaxModalPatientAdminCloseAndRefreshHeader() {
   $.ajax({
     url: urlBase + '/patient/ajax/refreshHeaderPatientAdminData/',
@@ -922,8 +1050,62 @@ function ajaxModalPatientAdminCloseAndRefreshHeader() {
       $('#identitePatient').html(data);
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
     }
+  });
+}
+
+///////////////////////////////////////////
+/////// fonctions relatives à la biométrie
+
+function getGraphCardio(year) {
+  if (!year) year = (new Date()).getFullYear();
+  $.ajax({
+    url: urlBase + '/patient/ajax/getGraphDataCardio/',
+    type: 'post',
+    data: {
+      year: year,
+      patientID: $('#identitePatient').attr("data-patientID")
+    },
+    dataType: "json",
+    success: function(data) {
+      $('#biometrieCardio').html(data.html);
+    },
+    error: function() {}
+  });
+}
+
+function getGraph() {
+  $(".histo-suppr").remove();
+  $.ajax({
+    url: urlBase + '/patient/ajax/getGraphData/',
+    type: 'post',
+    data: {
+      patientID: $('#identitePatient').attr("data-patientID")
+    },
+    dataType: "html",
+    success: function(data) {
+      if (data == 'ok')
+        return;
+      else if (data.substr(0, 7) == 'Erreur:')
+        return alert_popup('danger', data.substr(8));
+      data = JSON.parse(data);
+      for (var i in data) {
+        if (i != 'bornes') {
+          $("table.histo tbody").append('\
+            <tr class="histo-suppr">\
+              <td data-sort-value="' + i + '" style="text-align:center">' + (i < 3 * 365.25 ? ((i * 24 / 365.25) >> 1) + ' mois' : ((i * 2 / 365.25) >> 1) + ' ans') + '</td>\
+              <td style="text-align:center" data-sort-value="' + moment(data[i].date, "YYYY-MM-DD HH:mm:ss").format("YYYYMMDD") + '">' + moment(data[i].date, "YYYY-MM-DD HH:mm:ss").format("DD/MM/YYYY") + '</td>\
+              <td style="text-align:center;color:' + (data[i].poids.reel ? 'black' : 'grey') + '">' + data[i].poids.value + '</td>\
+              <td style="text-align:center;color:' + (data[i].taille.reel ? 'black' : 'grey') + '">' + data[i].taille.value + '</td>\
+              <td style="text-align:center;color:' + (data[i].imc.reel ? 'black' : 'grey') + '">' + data[i].imc.value + '</td>\
+            </tr>');
+        }
+      }
+      $("table.histo").stupidtable();
+      drawGraph(data);
+    },
+    error: function() {}
   });
 }
 
@@ -983,7 +1165,7 @@ function drawGraphPoidsNourisson(data, ctx) {
   $(".graph-poids")
     .attr("width", "610")
     .attr("height", "790")
-    .css("background-image", "url(/img/poids_nourissons.svg)")
+    .css("background-image", "url(" + urlBase + "/img/poids_nourissons.svg)")
     .css("background-size", "cover");
   drawDots(18, 567 / (3 * 365.25), 756 / 22, 0, 22, ctx, 'poids', data);
 }
@@ -992,7 +1174,7 @@ function drawGraphTailleNourisson(data, ctx) {
   $(".graph-taille")
     .attr("width", "614")
     .attr("height", "532")
-    .css("background-image", "url(/img/taille_nourissons.svg)")
+    .css("background-image", "url(" + urlBase + "/img/taille_nourissons.svg)")
     .css("background-size", "cover");
   drawDots(22, 567 / (3 * 365.25), 500 / 85, 0, 115, ctx, 'taille', data);
 }
@@ -1001,7 +1183,7 @@ function drawGraphPoidsGarcon(data, ctx) {
   $(".graph-poids")
     .attr("width", "596")
     .attr("height", "615")
-    .css("background-image", "url(/img/poids_garcons.svg)")
+    .css("background-image", "url(" + urlBase + "/img/poids_garcons.svg)")
     .css("background-size", "cover");
   drawDots(16, 567 / (18 * 365.25), 596 / 110, 0, 110, ctx, 'poids', data);
 }
@@ -1010,7 +1192,7 @@ function drawGraphTailleGarcon(data, ctx) {
   $(".graph-taille")
     .attr("width", "602")
     .attr("height", "831")
-    .css("background-image", "url(/img/taille_garcons.svg)")
+    .css("background-image", "url(" + urlBase + "/img/taille_garcons.svg)")
     .css("background-size", "cover");
   drawDots(22, 567 / (18 * 365.25), 812 / 150, 0, 200, ctx, 'taille', data);
 }
@@ -1019,7 +1201,7 @@ function drawGraphIMCGarcon(data, ctx) {
   $(".graph-imc")
     .attr("width", "622")
     .attr("height", "861")
-    .css("background-image", "url(/img/IMC_garcons.svg)")
+    .css("background-image", "url(" + urlBase + "/img/IMC_garcons.svg)")
     .css("background-size", "cover");
   drawDots(31, 567 / (18 * 365.25), 843 / 25, 0, 35, ctx, 'imc', data);
 }
@@ -1028,7 +1210,7 @@ function drawGraphPoidsFille(data, ctx) {
   $(".graph-poids")
     .attr("width", "608")
     .attr("height", "614")
-    .css("background-image", "url(/img/poids_filles.svg)")
+    .css("background-image", "url(" + urlBase + "/img/poids_filles.svg)")
     .css("background-size", "cover");
   drawDots(19, 567 / (18 * 365.25), 596 / 110, 0, 110, ctx, 'poids', data);
 }
@@ -1037,7 +1219,7 @@ function drawGraphTailleFille(data, ctx) {
   $(".graph-taille")
     .attr("width", "611")
     .attr("height", "831")
-    .css("background-image", "url(/img/taille_filles.svg)")
+    .css("background-image", "url(" + urlBase + "/img/taille_filles.svg)")
     .css("background-size", "cover");
   drawDots(23, 567 / (18 * 365.25), 812 / 150, 0, 200, ctx, 'taille', data);
 }
@@ -1046,7 +1228,7 @@ function drawGraphIMCFille(data, ctx) {
   $(".graph-imc")
     .attr("width", "619")
     .attr("height", "861")
-    .css("background-image", "url(/img/IMC_filles.svg)")
+    .css("background-image", "url(" + urlBase + "/img/IMC_filles.svg)")
     .css("background-size", "cover");
   drawDots(29, 567 / (18 * 365.25), 843 / 25, 0, 35, ctx, 'imc', data);
 }
@@ -1106,6 +1288,191 @@ function drawDots(margeX, scaleX, scaleY, Xmin, Ymax, ctx, sel, data) {
 
 }
 
+////////////////////////////////////////////////////////////////////////
+///////// Fonctions relatives aux historiques
+
+/**
+ * Supprimer un élément de l'historique
+ * @param  {object} el objet jquery cliqué
+ * @return {void}
+ */
+function suppCs(el) {
+  objetID = el.attr('data-objetID');
+
+  $.ajax({
+    url: urlBase + '/patient/ajax/suppCs/',
+    type: 'post',
+    data: {
+      objetID: objetID
+    },
+    dataType: "json",
+    success: function() {
+      $('.tr' + objetID).remove();
+      refreshHistorique();
+      refreshHistoriqueToday();
+    },
+    error: function() {
+      alert_popup("danger", 'Problème, rechargez la page !');
+
+    }
+  });
+}
+
+/**
+ * Permuter l'importance d'une ligne d'historique
+ * @param  {object} el objet jquery cliqué
+ * @return {void}
+ */
+function toogleImportant(el) {
+  importanceActu = el.attr('data-importanceActu');
+  objetID = el.attr('data-objetID');
+
+  $.ajax({
+    url: urlBase + '/patient/ajax/importanceCsToogle/',
+    type: 'post',
+    data: {
+      importanceActu: importanceActu,
+      objetID: objetID
+    },
+    dataType: "html",
+    success: function() {
+      if (importanceActu == 'n') {
+        el.html('Démarquer important');
+        el.attr('data-importanceActu', 'y');
+        el.closest('tr').addClass(el.closest('tr').hasClass('trReglement') ? 'table-danger' : 'table-info');
+      }
+      if (importanceActu == 'y') {
+        el.closest('tr').removeClass('table-info').removeClass('table-danger');
+        el.html('Marquer important');
+        el.attr('data-importanceActu', 'n');
+      }
+    },
+    error: function() {
+      alert_popup("danger", 'Problème, rechargez la page !');
+
+    }
+  });
+}
+
+/**
+ * Compléter le titre de la ligne d'historique via modal
+ * @return {void}
+ */
+function modalAlternateTitreChange() {
+  titreActu = $('#alternatTitreModal #titreActu').val();
+  objetID = $('#alternatTitreModal #objetID').val();
+
+  $.ajax({
+    url: urlBase + '/patient/ajax/completerTitreCs/',
+    type: 'post',
+    data: {
+      titre: titreActu,
+      objetID: objetID
+    },
+    dataType: "html",
+    success: function() {
+      if(titreActu.length > 0) {
+        $('.alternatTitre' + objetID).html(' : ' + titreActu);
+      } else {
+        $('.alternatTitre' + objetID).html('');
+      }
+      $('.alternatTitre' + objetID).parents('tr.trLigneExamen').attr('data-alternatTitre', titreActu);
+      $('#alternatTitreModal').modal('toggle');
+    },
+    error: function() {
+      alert_popup("danger", 'Problème, rechargez la page !');
+
+    }
+  });
+}
+
+/**
+ * Changer la date de création d'une ligne d'historique
+ * @param  {object} $el objet jquery cliqué
+ * @return {void}
+ */
+function changeCreationDate($el) {
+  var objetID = $el.closest('tr').attr('data-objetID');
+  var registerDate = $el.closest('tr').attr('data-registerDate');
+  var creationDate = $el.closest('tr').attr('data-creationDate');
+
+  $("#modalCreationDate input[name='objetID']").val(objetID);
+  $("#modalRegisterDateDisplay").html(registerDate);
+  $("#modalCreationDateDisplay").html(creationDate);
+  $("#modalCreationDate input[name='newCreationDate']").val(creationDate);
+  $("#modalCreationDate").modal('show');
+}
+
+/**
+ * Voir les détails d'une ligne d'historique
+ * @param  {object} element objet jquery cliqué (ligne d'historique)
+ * @param  {[type]} timed   [description]
+ * @return {void}
+ */
+var objDetTimer;
+
+function showObjetDet(element, timed) {
+  if (objDetTimer == undefined) {
+    objDetTimer = setTimeout(showObjetDet, 200, element, true);
+    return;
+  }
+  clearTimeout(objDetTimer);
+  objDetTimer = undefined;
+  if (timed == undefined) {
+    return;
+  }
+  zone = element.closest('table').attr('data-zone');
+  objetID = element.closest('tr').attr('data-objetID');
+  ligne = element.closest('tr');
+  destination = $("." + zone + " .detObjet" + objetID);
+
+  if (destination.length == 0) {
+    if (element.closest('tr').attr('data-typeName') == 'lapOrdonnance') {
+      ligne.after('<tr class="detObjet' + objetID + ' detObjet" style="background : transparent"><td></td><td colspan="4" class="placeForOrdoLap py-4"><div class="text-right"><button class="btn btn-secondary btn-sm renouvToutesLignes mb-1" type="button" title="Renouveler"><i class="fa fa-sync-alt" aria-hidden="true"></i> Tout renouveler</button></div><div class="alert alert-primary gras" role="alert">Prescriptions ALD</div><div class="ald conteneurPrescriptionsALD"></div><div class="alert alert-dark gras" role="alert">Prescriptions standards</div><div style="min-height:15px;" class="conteneurPrescriptionsG"></div></td></tr>');
+      voirOrdonnanceMode = 'voirOrdonnance';
+      getOrdonnance(objetID, "." + zone + " .detObjet" + objetID + ' td.placeForOrdoLap');
+    } else {
+      ligne.after('<tr class="detObjet' + objetID + ' detObjet" style="background : transparent"></tr>');
+      destination = $("." + zone + " .detObjet" + objetID);
+
+      $.ajax({
+        url: urlBase + '/patient/ajax/ObjetDet/',
+        type: 'get',
+        data: {
+          objetID: objetID,
+        },
+        dataType: "html",
+        success: function(data) {
+          destination.html(data);
+        },
+        error: function() {
+          destination.remove();
+          alert_popup("danger", 'Problème, rechargez la page !');
+        }
+      });
+    }
+  } else {
+    destination.toggle();
+  }
+
+}
+
+/**
+ * Rafraichir l'historique complet
+ * @return {void}
+ */
+function refreshHistorique() {
+  if (!$('.historiqueMedicalComplet .trLigneExamen').length) {
+    $('.historiqueMedicalComplet').hide();
+    return;
+  }
+  $('.historiqueMedicalComplet').show();
+}
+
+/**
+ * Obtenir l'historique (complet)
+ * @return {void}
+ */
 function getHistorique() {
   $.ajax({
     url: urlBase + '/patient/ajax/getHistorique/',
@@ -1116,11 +1483,27 @@ function getHistorique() {
     dataType: "html",
     success: function(data) {
       $("#historique").html(data);
+      refreshHistorique();
     },
     error: function() {}
   });
 }
 
+/**
+ * Rafrachir historique du jour
+ * @return {void}
+ */
+function refreshHistoriqueToday() {
+  if (!$('.historiqueToday .trLigneExamen').length)
+    $('.historiqueToday').hide();
+  else
+    $('.historiqueToday').show();
+}
+
+/**
+ * Obtenir l'historique du jour
+ * @return {void}
+ */
 function getHistoriqueToday() {
   $.ajax({
     url: urlBase + '/patient/ajax/getHistoriqueToday/',
@@ -1131,7 +1514,69 @@ function getHistoriqueToday() {
     dataType: "html",
     success: function(data) {
       $("#historiqueToday").html(data);
+      refreshHistoriqueToday();
     },
     error: function() {}
+  });
+}
+
+/**
+ * Obtenir et rafraichir la colonne latérale
+ * @return {void}
+ */
+function getLatCol() {
+  $.ajax({
+    url: urlBase + '/patient/ajax/refreshLatColPatientAtcdData/',
+    type: 'post',
+    data: {
+      patientID: $('#identitePatient').attr("data-patientID"),
+    },
+    dataType: "html",
+    success: function(data) {
+      $("#patientLatCol").html(data);
+      activeWatchChange('#patientLatCol');
+    },
+    error: function() {}
+  });
+}
+
+////////////////////////////////////////////////////////////////////////
+///////// Fonctions relatives à la surveillance de changeemnt dans
+///////// formulaires pour enregistrement automatique
+
+/**
+ * Activer la surveillance des changements sur les input / textarea / select
+ * enfants de l'élément et sauvegarder les nouvelles valeurs
+ * @param  {string} parentTarget élément parent
+ * @return {void}
+ */
+function activeWatchChange(parentTarget) {
+  // la frappe sur input ou textarea
+  $(parentTarget + " input:not(.datepic), " + parentTarget + " textarea").typeWatch({
+    wait: 1000,
+    highlight: false,
+    allowSubmit: false,
+    captureLength: 1,
+    callback: function(value) {
+      patientID = $('#identitePatient').attr("data-patientID");
+      source = $(this);
+      instance = $(this).closest("form").attr("data-instance");
+      if ($(this).hasClass('changeObservByTypeName')) {
+        typeName = $(this).attr("data-typeName");
+        setPeopleDataByTypeName(value, patientID, typeName, source, instance);
+      } else {
+        typeID = $(this).attr("data-typeID");
+        setPeopleData(value, patientID, typeID, source, instance);
+      }
+    }
+  });
+  // les selects
+  $(parentTarget + " select").on("change", function(e) {
+    patientID = $('#identitePatient').attr("data-patientID");
+    typeID = $(this).attr("data-typeID");
+    value = $(this).val();
+    source = $(this);
+    instance = $(this).closest("form").attr("data-instance");
+    setPeopleData(value, patientID, typeID, source, instance);
   });
 }

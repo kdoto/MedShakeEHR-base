@@ -39,14 +39,15 @@ $(document).ready(function() {
 
 
   //envoyer pour signature
-  $('body').on("click", "a.sendSign", function(e) {
+  $('body').on("click", "a.sendSign, button.sendSign", function(e) {
     e.preventDefault();
     source = $(this);
     $.ajax({
       url: urlBase+'/patients/ajax/patientsSendSign/',
       type: 'post',
       data: {
-        patientID: $(this).attr('data-patientID')
+        patientID: $(this).attr('data-patientID'),
+        typeID: $(this).attr('data-typeID')
       },
       dataType: "html",
       success: function(data) {
@@ -57,7 +58,8 @@ $(document).ready(function() {
         }, 1000);
       },
       error: function() {
-        alert('Problème, rechargez la page !');
+        alert_popup("danger", 'Problème, rechargez la page !');
+
       }
     });
   });
@@ -89,13 +91,30 @@ $(document).ready(function() {
 
           },
           error: function() {
-            alert('Problème, rechargez la page !');
+            alert_popup("danger", 'Problème, rechargez la page !');
+
           }
         });
       }
     }
   });
 
+  // bouton de nouvelle transmission
+  $('body').on("click", ".newTransmission", function(e) {
+    e.preventDefault();
+    $('#transConcerne').addClass('d-none');
+    $('#transPatientConcID').val($(this).attr('data-patientID'));
+    $('#transPatientConcSel').html($(this).parents('tr').find('span.identite').html());
+    $('#transPatientConcSel').removeClass('d-none');
+
+    $('#modalTransmission').modal('show');
+  });
+  // poster une transmission
+  $('body').on("click", "#transmissionEnvoyer", function(e) {
+    e.preventDefault();
+    transmissionNewNextLocation = 'stayHere';
+    posterTransmission();
+  });
 
   //ajouter / retirer liste des Praticiens
   $('body').on("click", "a.switchPraticienListe", function(e) {
@@ -112,14 +131,15 @@ $(document).ready(function() {
         el = source.closest('tr');
         if (data.type == 'pro') {
           source.html('Retirer de la liste Praticiens');
-          el.addClass('info')
+          el.addClass('table-info')
         } else {
-          el.removeClass('info')
+          el.removeClass('table-info')
           source.html('Ajouter de la liste Praticiens');
         };
       },
       error: function() {
-        alert('Problème, rechargez la page !');
+        alert_popup("danger", 'Problème, rechargez la page !');
+
       }
     });
   });
@@ -140,7 +160,8 @@ $(document).ready(function() {
         window.location=urlBase+'/patient/'+patientID+'/';
       },
       error: function() {
-        alert('Problème, rechargez la page !');
+        alert_popup("danger", 'Problème, rechargez la page !');
+
       }
     });
   });
@@ -159,10 +180,11 @@ $(document).ready(function() {
         window.location=urlBase+'/patient/edit/'+externID+'/';
       },
       error: function() {
-        alert('Problème, rechargez la page !');
+        alert_popup("danger", 'Problème, rechargez la page !');
+
       }
     });
-    
+
   });
 
 });
@@ -185,7 +207,8 @@ function updateListingPatients() {
       $('#listing').html(data);
     },
     error: function() {
-      alert('Problème, rechargez la page !');
+      alert_popup("danger", 'Problème, rechargez la page !');
+
     }
   });
 

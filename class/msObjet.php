@@ -25,6 +25,7 @@
  * Manipulation des objets (enregistrement des data)
  *
  * @author Bertrand Boutillier <b.boutillier@gmail.com>
+ * @contrib fr33z00 <https://github.com/fr33z00>
  */
 
 class msObjet
@@ -38,9 +39,13 @@ class msObjet
      */
     public $_toID;
     /**
-     * @var int ID de l'utilisateur qui enregistre l'objet
+     * @var int ID de l'utilisateur propriétaire de l'objet
      */
     private $_fromID;
+    /**
+     * @var int ID de l'utilisateur qui enregistre l'objet si différent du propriétaire
+     */
+    private $_byID;
     /**
      * @var string jeu de données
      */
@@ -96,7 +101,7 @@ public function getToID()
 }
 
 /**
- * Définir le user qui enregistre l'objet
+ * Définir le propriétaire de l'objet
  * @param [type] $v [description]
  * @return int fromID
  */
@@ -106,6 +111,20 @@ public function getToID()
             return $this->_fromID = $v;
         } else {
             throw new Exception('FromID is not numeric');
+        }
+    }
+
+/**
+ * Définir le user qui enregistre l'objet quand différent du propriétaire
+ * @param [type] $v [description]
+ * @return int fromID
+ */
+    public function setByID($v)
+    {
+        if (is_numeric($v)) {
+            return $this->_byID = $v;
+        } else {
+            throw new Exception('byID is not numeric');
         }
     }
 
@@ -174,7 +193,7 @@ public function getToID()
     public function getCompleteObjetDataByID($id)
     {
         $docTypeID = msData::getTypeIDFromName('docType');
-        return msSQL::sqlUnique("select pd.* , t.name, t.label, t.groupe, t.formValues, doc.value as ext
+        return msSQL::sqlUnique("select pd.* , t.name, t.label, t.groupe, t.formValues, t.module, doc.value as ext
         from objets_data as pd
         left join data_types as t on t.id=pd.typeID
         left join objets_data as doc on doc.instance=pd.id and doc.typeID='".$docTypeID."'
@@ -205,9 +224,16 @@ public function getToID()
         if (!is_numeric($this->_fromID)) {
             throw new Exception('FromID is not numeric');
         }
-        return msSQL::sqlQuery("update objets_data set deleted='y', deletedByID='".$this->_fromID."' where id='".$id."' or instance='".$id."' ");
-    }
+        msSQL::sqlQuery("update objets_data set deleted='y', deletedByID='".$this->_fromID."' where id='".$id."' ");
 
+        if($tab=msSQL::sql2tabSimple("select id from objets_data where instance='".$id."'")) {
+          foreach($tab as $sid) {
+            $this->setDeletedObjetAndSons($sid);
+          }
+        }
+
+        return true;
+    }
 
 /**
  * Créer ou mettre à jour un objet par son nom
@@ -271,6 +297,9 @@ public function getToID()
         'instance'=> $parentID,
         'value' => $value
       );
+      if (isset($this->_byID)) {
+          $pd['byID']=$this->_byID;
+      }
 
       //si creationDate est fixée
       if (isset($this->_creationDate)) {
@@ -291,8 +320,8 @@ public function getToID()
 
           // création d'un nouvel objet uniquement si auteur différent ou si durée de vie dépassée (ou si précédent effacé),
           // pas de marquage des versions précédentes comme outdated
-          // but : générer des versions sucessives toutes visibles à partir du moment ou la durée de vie
-          // (temps autorisé d'édition) est dépassé ou que l'auteur n'est pas le même.
+          // but : générer des versions sucessives toutes visibles à partir du moment où la durée de vie
+          // (temps autorisé d'édition) est dépassée ou que l'auteur n'est pas le même.
 
           //recup le titre
           if (is_numeric($objetID)) {
@@ -464,5 +493,64 @@ public function getToID()
 
         return false;
       }
+
+/**
+* Obtenir la valeur du dernier objet d'un type particulier pour un patient particulier
+* @param  string $name nom du type de l'objet
+* @param  string $instance int de l'instance de l'objet
+* @return array tableau avec information sur l'objet
+*/
+    public function getLastObjetValueByTypeName($name, $instance=false) {
+      if (!isset($this->_toID)) {
+          throw new Exception('toID is not defined');
+      }
+
+      if(is_numeric($instance)) {
+        $where = " and pd.instance='".$instance."'";
+      } else {
+        $where = null;
+      }
+
+      $name2typeID=new msData;
+
+      if($name2typeID=$name2typeID->getTypeIDsFromName([$name])) {
+        if(isset($name2typeID[$name])) {
+          if($data=msSQL::sqlUniqueChamp("select pd.value
+          from objets_data as pd
+          where pd.toID='".$this->_toID."' and pd.typeID = '".$name2typeID[$name]."' and pd.deleted='' and pd.outdated='' $where
+          order by updateDate desc
+          limit 1")) {
+            return $data;
+          } else {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+      return false;
+    }
+
+/**
+ * Obtenir la liste des ID pour un type donnée et un patient donné
+ * @param  string $name name du type
+ * @return array       tableau id=>date création
+ */
+    public function getListObjetsIdFromName($name) {
+      if (!isset($this->_toID)) {
+          throw new Exception('toID is not defined');
+      }
+      $name2typeID=new msData;
+
+      if($name2typeID=$name2typeID->getTypeIDsFromName([$name])) {
+        if($data=msSQL::sql2tabKey("select pd.id, pd.creationDate
+        from objets_data as pd
+        where pd.toID='".$this->_toID."' and pd.typeID = '".$name2typeID[$name]."' and pd.deleted='' and pd.outdated=''
+        order by  pd.creationDate", 'id', 'creationDate')) {
+          return $data;
+        }
+      }
+      return false;
+    }
 
 }

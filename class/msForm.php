@@ -27,6 +27,7 @@
  * - obtention des valeurs pour un individu particulier
  *
  * @author Bertrand Boutillier <b.boutillier@gmail.com>
+ * @contrib fr33z00 <https://github.com/fr33z00>
  */
 
 class msForm
@@ -71,6 +72,10 @@ class msForm
      * @var array log des row et col du form pour pouvoir mettre une preValue après coup
      */
     private $_log;
+    /**
+     * @var array array PHP du formulaire construit
+     */
+    private $_builtForm;
 
 /**
  * Définir le numéro du formulaire
@@ -217,12 +222,24 @@ class msForm
             $where=null;
         }
 
-        if ($this->_prevalues = msSQL::sql2tabKey("select typeID, value from objets_data where typeID in ('".implode("','", $this->_formExtractDistinctTypes())."') and toID='".$patientID."' and outdated='' ".$where, "typeID", "value")) {
+        if ($this->_prevalues = msSQL::sql2tabKey("select typeID, value from objets_data where typeID in ('".implode("','", $this->formExtractDistinctTypes())."') and toID='".$patientID."' and outdated='' ".$where, "typeID", "value")) {
             return $this->_prevalues;
         } else {
             return $this->_prevalues=array();
         }
     }
+
+/**
+ * Obtenir le name de la categorie du form à partir partir du cat id
+ * @param  int $id de la catégorie
+ * @return string     name
+ */
+    public static function getCatNameFromCatID($id)
+    {
+        return msSQL::sqlUniqueChamp("select name from forms_cat where id = '".$id."' ");
+    }
+
+
 /**
  * Obetnir le formulaire sous forme d'array PHP qui sera décotiqué par une macro Twig
  * pour obtenir au final une version HTML
@@ -231,7 +248,7 @@ class msForm
     public function getForm()
     {
         if ($formYaml=$this->getFormFromDb($this->_formID)) {
-            return $this->_formBuilder($formYaml);
+            return $this->_builtForm = $this->_formBuilder($formYaml);
         } else {
             throw new Exception('Form cannot be generated');
         }
@@ -244,7 +261,7 @@ class msForm
     public function addSubmitToForm(&$f, $class='btn-primary')
     {
         $f['structure'][][1]=array(
-        'size'=>12,
+        'size'=>'col-12',
         'elements'=>array(
           '0'=>array(
             'type'=>'form',
@@ -576,7 +593,7 @@ class msForm
     private function _formBuilderBloc($blocs, $rowNumber, $colNumber, &$r, $dataset)
     {
         if (is_array($blocs)) {
-            $r['structure'][$rowNumber][$colNumber]['elements']=array();
+            if(!isset($r['structure'][$rowNumber][$colNumber]['elements'])) $r['structure'][$rowNumber][$colNumber]['elements']=array();
             foreach ($blocs as $k=>$v) {
 
                 //template
@@ -645,6 +662,10 @@ class msForm
                           $type['formValues']=Spyc::YAMLLoad($type['formValues']);
                         }
 
+                    //traitement spécifique au radio
+                    } elseif ($type['formType']=="radio") {
+                      $type['formValues']=Spyc::YAMLLoad($type['formValues']);
+
                     //traitement spécifique au textarea
                     } elseif ($type['formType']=="textarea") {
                         foreach ($bloc as $h) {
@@ -678,8 +699,8 @@ class msForm
                             $type['autocompleteclass']=' jqautocomplete';
 
                             foreach ($bloc as $h) {
-                                if (preg_match('#data-acTypeID=([0-9]+:{0,1})+#i', $h)) {
-                                    $type['dataAcTypeID']=$h;
+                                if (preg_match('#data-acTypeID=(([0-9a-z]+:{0,1})+)#i', $h, $matchOut)) {
+                                    $type['dataAcTypeID']='data-acTypeID="'.$this->_traiterListeTypesAutocomplete($matchOut[1]).'"';
                                 }
                             }
                             if (!isset($type['dataAcTypeID'])) {
@@ -703,6 +724,27 @@ class msForm
             }
         }
     }
+
+/**
+ * Traiter les types passés en paramètre pour un autocomplete étendu aux valeurs d'autres types
+ * @param  string $stringTypes typeID ou typeName séparés par :
+ * @return string              typeID séparés par :
+ */
+    private function _traiterListeTypesAutocomplete($stringTypes) {
+      $finalTab=[];
+      if(!empty($stringTypes)) {
+        $typesTab=explode(':', $stringTypes);
+        foreach($typesTab as $type) {
+          if(is_numeric($type)) {
+            $finalTab[]=$type;
+          } elseif (is_string($type)) {
+            if($convert = msData::getTypeIDFromName($type)) $finalTab[]=$convert;
+          }
+        }
+      }
+      return implode(':', $finalTab);
+    }
+
 /**
  * Construire le formulaire: traitement des en-tête de ligne
  * @param  string $value     Le nom de ligne à afficher
@@ -743,7 +785,7 @@ class msForm
 
 /**
  * Construire le tableau: définir la largeur de colonne
- * @param  int $value     Largeur
+ * @param  string $value     largeur exprimée avec un int ou class bootstrap
  * @param  int $rowNumber Numéro de ligne
  * @param  int $colNumber Numéro de colonne
  * @param  array $r         Tableau final de résultat
@@ -751,7 +793,11 @@ class msForm
  */
     private function _formBuilderColSize($value, $rowNumber, $colNumber, &$r)
     {
+      if(is_numeric(trim($value){0})) {
+        $r['structure'][$rowNumber][$colNumber]['size']='col-md-'.$value;
+      } else {
         $r['structure'][$rowNumber][$colNumber]['size']=$value;
+      }
     }
 
 
@@ -790,7 +836,7 @@ class msForm
  * Brutal mais ça fonctionne ;-)
  * @return array Array de tous les typeID présents.
  */
-    private function _formExtractDistinctTypes()
+    public function formExtractDistinctTypes()
     {
         if ($formyaml=msSQL::sqlUniqueChamp("select yamlStructure from forms where id='".$this->_formID."' limit 1")) {
 
@@ -861,5 +907,52 @@ class msForm
     } else {
       return $formyaml;
     }
+  }
+
+/**
+ * Obtenir une version basique du template d'impression du form
+ * @return string html/twig
+ */
+  public function getFlatBasicTemplateCode() {
+    if(!isset($this->_builtForm)) throw new Exception('Form is not yet built');
+    $string='';
+    foreach($this->_builtForm['structure'] as $ligneID=>$ligne) {
+      foreach($ligne as $colID=>$element) {
+        if(isset($element['type'])) {
+          if($element['type'] == 'head') {
+            $string.='<h2>'.$element['value']."</h2>\n";
+          }
+        }
+        foreach($element as $typeID=>$type) {
+          if(!is_array($type)) continue;
+          foreach($type as $ID=>$el) {
+            if(isset($el['type']) and $el['type'] == 'form') {
+              if($el['value']['formType'] == 'radio' or $el['value']['formType'] == 'select') {
+                $string.=$el['value']['label'].' : ';
+                $i=0;
+                foreach($el['value']['formValues'] as $repId=>$rep) {
+                  if($i==0) {
+                    $string.='{% if tag.val_'.$el['value']['internalName'].' == "'.$repId.'" %}'.$rep;
+                  } else {
+                    $string.='{% elseif tag.val_'.$el['value']['internalName'].' == "'.$repId.'" %}'.$rep;
+                  }
+                  $i++;
+                }
+                $string.="{% else %}- non renseigné -{% endif %}<br>\n";
+              } elseif($el['value']['formType'] == 'textarea' ) {
+                $string.=$el['value']['label'].' :<p>{{ tag.'.$el['value']['internalName']."|nl2br }}</p>\n";
+              } else {
+              if(!isset($el['value']['label'])) $el['value']['label']='';
+                $string.=$el['value']['label'].' : {{ tag.'.$el['value']['internalName']." }}<br>\n";
+              }
+            } elseif($el['type'] == 'head' and !empty(trim(str_replace('&nbsp;','',$el['value'])))) {
+              $string.="\n<h3>".$el['value']."</h3>\n";
+            }
+          }
+        }
+        }
+
+    }
+    return $string;
   }
 }

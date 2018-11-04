@@ -32,22 +32,22 @@
 
 {% block head %}
   {{ parent() }}
-  <script defer="defer" src="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/js/configuration.js"></script>
+  <script defer="defer" src="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/js/configuration.js?{{ modules.base }}"></script>
 {% endblock %}
 
 {% block body %}
 
   <ol class="breadcrumb">
-    <li>
+    <li class="breadcrumb-item">
       <a href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/">Configuration</a>
     </li>
-    <li>
+    <li class="breadcrumb-item">
       <a href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/#ca">Paramètres avancés</a>
     </li>
-    <li>
+    <li class="breadcrumb-item">
       <a href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/forms/">Formulaires</a>
     </li>
-    <li class="active">Aperçu du formulaire #{{ page.formData.id }}
+    <li class="breadcrumb-item active">Aperçu du formulaire #{{ page.formData.id }}
     </li>
   </ol>
 
@@ -56,31 +56,32 @@
 
     <div class=" col-md-4">
     {% for k,v in page.tabTypes %}
-      <h2 id="cat{{ v.0.cat }}">{{ v.0.catLabel }}</h2>
-      <table class="table table-hover">
+      <h2 class="mb-2" id="cat{{ v.0.cat }}">{{ v.0.catLabel }}</h2>
+      <table class="table table-sm mb-0 table-hover mb-3">
       <thead>
       <tr>
-        <th class="col-md-1">#</th>
-        <th class="col-md-2">Module</th>
-        <th class="col-md-7">Nom</th>
-        <th class="col-md-2">Actions</th>
+        <th>#</th>
+        <th>Module</th>
+        <th>Nom</th>
+        <th></th>
       </tr>
       </thead>
       <tbody>
       {% for w in v %}
-        <tr {% if w.id == page.formData.id %}class="success"{% endif %}>
+        <tr {% if w.id == page.formData.id %}class="table-success"{% endif %}>
         <td>{{ w.id }}</td>
         <td>{{ w.module }}</td>
         <td>{{ w.name }}</td>
 
-        <td>
-          <a class="btn btn-default btn-xs" role="button" href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/forms/preview/{{ w.id }}/">
-          <span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>
-          </a>
-          <a class="btn btn-default btn-xs" role="button" href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/forms/edit/{{ w.id }}/">
-          <span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>
-          </a>
-
+        <td class="text-right">
+          <div class="btn-group">
+            <a class="btn btn-light btn-sm" role="button" href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/forms/preview/{{ w.id }}/">
+              <span class="fa fa-eye" aria-hidden="true"></span>
+            </a>
+            <a class="btn btn-light btn-sm" role="button" href="{{ config.protocol }}{{ config.host }}{{ config.urlHostSuffixe }}/configuration/forms/edit/{{ w.id }}/">
+              <span class="fa fa-pencil-alt" aria-hidden="true"></span>
+            </a>
+          </div>
         </td>
         </tr>
       {% endfor %}
@@ -96,8 +97,32 @@
 
       <div class="alert alert-warning" role="alert">Les fichiers javascript n'étant pas chargés, ce formulaire n'est pas dynamique !</div>
 
-      <div class="jumbotron">
+      <div class="jumbotron col-md-12">
         {{ f.formbuilder(page.form , page.formIN ) }}
+      </div>
+
+      <div class="card my-3">
+        <div class="card-header" data-toggle="collapse" data-target="#collapseTemplate" style="cursor: pointer">
+          <button class="btn btn-light btn-sm"><i class="far fa-plus-square"></i></button> Template d'impression
+        </div>
+        <div id="collapseTemplate" class="collapse card-body">
+          <div class="alert alert-warning" role="alert">
+            Ce code est généré automatiquement pour servir de base à la création d'un template d'impression. Il doit être retravaillé pour obtenir un résultat correct.
+          </div>
+          <textarea class="form-control" rows="20">{{ page.basicTemplateCode }}</textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" data-toggle="collapse" data-target="#collapseSql" style="cursor: pointer">
+          <button class="btn btn-light btn-sm">
+            <i class="far fa-plus-square"></i>
+          </button>
+          Code SQL de création
+        </div>
+        <div id="collapseSql" class="collapse card-body">
+          <textarea class="form-control" rows="20">{{ page.sqlCode }}</textarea>
+        </div>
       </div>
     </div>
   </div>

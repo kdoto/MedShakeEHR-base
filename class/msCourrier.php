@@ -40,6 +40,10 @@ class msCourrier
  */
     private $_modeleID;
 /**
+ * @var int $_modele du document concerné
+ */
+    private $_modele;
+/**
  * @var int $_patientID du document concerné
  */
     private $_patientID;
@@ -69,6 +73,17 @@ class msCourrier
     }
 
 /**
+ * Définir le modeleID par le nom du modèle
+ * @param int $data modeleID du document concerné
+ */
+    public function setModeleIDByName($name)
+    {
+        $id = msData::getTypeIDFromName($name);
+        $this->_modele = $name;
+        return $this->_modeleID = $id;
+    }
+
+/**
  * Définir le patientID
  * @param int $data patientID du document concerné
  */
@@ -84,6 +99,19 @@ class msCourrier
     public function setModule($data)
     {
         return $this->_module = $data;
+    }
+
+/**
+ * Obtenir le modele ID
+ * @return int modeleID
+ */
+    public function getModeleID() {
+
+      if (!isset($this->_modeleID)) {
+          throw new Exception('ModelID is not defined');
+      }
+
+      return $this->_modeleID;
     }
 
 /**
@@ -129,7 +157,7 @@ class msCourrier
         $tabRetour['objetID']=$objetData['id'];
         $tabRetour['patientID']=$objetData['toID'];
         $tabRetour['instance']=$objetData['instance'];
-        $tabRetour['printModel']=$this->_getPrintModel($objetData['formValues']).'.html.twig';
+        $tabRetour['printModel']=$this->getPrintModel($objetData['formValues']).'.html.twig';
         $tabRetour['module']=$this->_getModuleOrigine($objetData['formValues']);
 
         //patient data
@@ -384,7 +412,7 @@ class msCourrier
  * @param  int $formIN internalName du formulaire
  * @return string          nom du template (sans extension)
  */
-    private function _getPrintModel($formIN)
+    public function getPrintModel($formIN)
     {
         return msSQL::sqlUniqueChamp("select printModel from forms where internalName='".$formIN."' limit 1");
     }
@@ -432,6 +460,7 @@ class msCourrier
         $rdata['identiteComplete'] = $data['firstname'].' '.$data['lastname'].' ('.$motNe.' '.$data['birthname'].')';
         $rdata['identiteUsuelleTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'];
         $rdata['identiteCompleteTitreLong'] = $titreLong.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' '.$data['birthname'].')';
+        $rdata['identiteCompleteTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' '.$data['birthname'].')';
         $rdata['identiteUsuelleTitreCourtDdn'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' le '.$data['birthdate'].')';
         $rdata['identiteCompleteTitreLongDdn'] = $titreLong.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' '.$data['birthname'].' le '.$data['birthdate'].')';
 
@@ -443,6 +472,7 @@ class msCourrier
         $rdata['identiteComplete'] = $data['firstname'].' '.$data['lastname'];
         $rdata['identiteUsuelleTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'];
         $rdata['identiteCompleteTitreLong'] = $titreLong.' '.$data['firstname'].' '.$data['lastname'];
+        $rdata['identiteCompleteTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'];
         $rdata['identiteUsuelleTitreCourtDdn'] = $titreCourt.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' le '.$data['birthdate'].')';
         $rdata['identiteCompleteTitreLongDdn'] = $titreLong.' '.$data['firstname'].' '.$data['lastname'].' ('.$motNe.' le '.$data['birthdate'].')';
 
@@ -454,6 +484,7 @@ class msCourrier
         $rdata['identiteComplete'] = $data['firstname'].' '.$data['birthname'];
         $rdata['identiteUsuelleTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['birthname'];
         $rdata['identiteCompleteTitreLong'] = $titreLong.' '.$data['firstname'].' '.$data['birthname'];
+        $rdata['identiteCompleteTitreCourt'] = $titreCourt.' '.$data['firstname'].' '.$data['birthname'];
         $rdata['identiteUsuelleTitreCourtDdn'] = $titreCourt.' '.$data['firstname'].' '.$data['birthname'].' ('.$motNe.' le '.$data['birthdate'].')';
         $rdata['identiteCompleteTitreLongDdn'] = $titreLong.' '.$data['firstname'].' '.$data['birthname'].' ('.$motNe.' le '.$data['birthdate'].')';
       }

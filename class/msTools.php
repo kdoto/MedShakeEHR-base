@@ -134,6 +134,16 @@ class msTools
   }
 
 /**
+ * Valider une chaîne comme étant une expression régulière
+ * @param  string  $string expression
+ * @return boolean         TRUE / FALSE
+ */
+  public static function isRegularExpression($string) {
+    return @preg_match($string, '') !== FALSE;
+  }
+
+
+/**
  * "bbcodifier" du html
  * @param  string $t le texte
  * @return string    le texte "bbcodifier"
@@ -189,13 +199,14 @@ class msTools
  */
   public static function utf8_converter($array)
   {
+    if(is_array($array)) {
       array_walk_recursive($array, function (&$item, $key) {
           if (!mb_detect_encoding($item, 'utf-8', true)) {
               $item = utf8_encode($item);
           }
       });
-
-      return $array;
+    }
+    return $array;
   }
 
 /**
@@ -314,5 +325,40 @@ class msTools
 
   	return $dirs;
   }
+
+/**
+ * Convertir un object en array
+ * @param  object $objet objet à convertir
+ * @return array        array
+ */
+   public static function objectToArray($objet) {
+     return json_decode(json_encode($objet), true);
+   }
+
+
+/**
+ * Trier un tableau en natural sorting via un nom de clef de colonne
+ * Thanks to Torleif Berger <https://www.geekality.net/2017/02/03/php-natural-sort-array-by-a-given-key/>
+ * @param  string $key   colonne sur laquelle trier
+ * @param  array  $array array à trier
+ * @return array        array trié
+ */
+   public static function array_natsort_by($key, array &$array)
+   {
+       return usort($array, function($x, $y) use ($key)
+       {
+           return strnatcasecmp($x[$key] ?? null, $y[$key] ?? null);
+       });
+   }
+
+/**
+ * Vérifier si une commande système existe
+ * @param  string $cmd nom de la commande
+ * @return boolean      true / false
+ */
+   public static function commandExist($cmd) {
+      $return = shell_exec(sprintf("which %s", escapeshellarg($cmd)));
+      return !empty($return);
+   }
 
 }

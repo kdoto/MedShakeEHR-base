@@ -21,59 +21,90 @@
  */
 
 /**
- * Patient > action : sauver un règlement
+ * Patient > ajax : sauver un règlement
  *
  * @author Bertrand Boutillier <b.boutillier@gmail.com>
  * @contrib fr33z00 <https://www.github.com/fr33z00>
  */
 
-if ($_POST['module']!='base' and !isset($delegate)) {
-    return;
+if (!in_array($_POST['reglementForm'], ['baseReglementLibre', 'baseReglementS1', 'baseReglementS2'])) {
+      $hook=$p['homepath'].'/controlers/module/'.$_POST['module'].'/patient/actions/inc-hook-saveReglementForm.php';
+      if ($_POST['module']!='' and $_POST['module']!='base' and is_file($hook)) {
+          include $hook;
+      }
+      if (!isset($delegate)) {
+          return;
+      }
 }
 
-if (count($_POST['acteID'])>0) {
+if (count($_POST['acteID'])>0 or strlen($_POST['regleDetailsActes']) > 0 ) {
+    if(!is_numeric($_POST['acteID'])) $_POST['acteID']=0;
     $patient = new msObjet();
-    $patient->setFromID($p['user']['id']);
+    $patient->setFromID($_POST['asUserID']?:$p['user']['id']);
     $patient->setToID($_POST['patientID']);
+    if ($_POST['asUserID']) {
+        $patient->setByID($p['user']['id']);
+    }
 
     if (!isset($_POST['regleSituationPatient'])) {
       $_POST['regleSituationPatient']='A';
     }
-    foreach (['regleTarifCejour', 'regleDepaCejour', 'regleCheque', 'regleCB', 'regleEspeces', 'regleTiersPayeur', 'regleFacture'] as $param) {
+    foreach (['regleTarifSSCejour', 'regleTarifLibreCejour', 'regleDepaCejour', 'regleModulCejour', 'regleCheque', 'regleCB', 'regleEspeces', 'regleTiersPayeur', 'regleFacture'] as $param) {
         if (!isset($_POST[$param])) {
           $_POST[$param]='';
         }
     }
     //support
-    if ($_POST['objetID']!=='') {
-        $supportID=$patient->createNewObjetByTypeName($_POST['porteur'], '', '0', $_POST['acteID'], $_POST['objetID']);
+    if (isset($_POST['objetID']) and is_numeric($_POST['objetID'])) {
+        $supportID=$patient->createNewObjet($_POST['porteur'], '', '0', $_POST['acteID'], $_POST['objetID']);
+    } elseif($_POST['acteID']>0) {
+        $supportID=$patient->createNewObjet($_POST['porteur'], '', '0', $_POST['acteID']);
     } else {
-        $supportID=$patient->createNewObjetByTypeName($_POST['porteur'], '', '0', $_POST['acteID']);
+        $supportID=$patient->createNewObjet($_POST['porteur'], '');
     }
+    echo 'support : '.$supportID;
 
     $paye= $_POST['regleCheque'] + $_POST['regleCB'] + $_POST['regleEspeces'] + $_POST['regleTiersPayeur'] + '0';
-    $apayer= $_POST['regleTarifCejour'] + $_POST['regleDepaCejour'] + '0';
+    $apayer= $_POST['regleTarifSSCejour'] + $_POST['regleDepaCejour'] + $_POST['regleTarifLibreCejour'] + $_POST['regleModulCejour'] + '0';
     $important=array('id'=>$supportID, 'important'=>$paye < $apayer?'y':'n');
     msSQL::sqlInsert('objets_data', $important);
 
+    if ($_POST['regleTarifSSCejour']!='' or $_POST['regleDepaCejour']!='') {
+         unset($_POST['regleTarifLibreCejour']);
+         unset($_POST['regleModulCejour']);
+    } elseif ($_POST['regleTarifLibreCejour']!='' or $_POST['regleModulCejour']!='') {
+         unset($_POST['regleTarifSSCejour']);
+         unset($_POST['regleDepaCejour']);
+    }
+
     foreach ($_POST as $param=>$value) {
-        if (!in_array($param, ['module', 'formIN', 'acteID', 'objetID', 'patientID', 'porteur'])) {
+        if (!in_array($param, ['module', 'asUserID', 'reglementForm', 'formIN', 'acteID', 'objetID', 'patientID', 'porteur'])) {
             $patient->createNewObjetByTypeName($param, $value, $supportID);
         }
     }
 
     //titre
-    $codes = msSQL::sqlUniqueChamp("select details from actes where id='".$_POST['acteID']."' limit 1");
-    $codes = Spyc::YAMLLoad($codes);
-    $codes = implode(' + ', array_keys($codes));
+    if($_POST['acteID'] > 0) {
+        $codes = msSQL::sqlUniqueChamp("select details from actes where id='".$_POST['acteID']."' limit 1");
+        $codes = Spyc::YAMLLoad($codes);
+        $codes = implode(' + ', array_keys($codes));
+    } else {
+        $codes = json_decode($_POST['regleDetailsActes'], TRUE);
+        $codes = implode(' + ', array_column($codes, 'acte') );
+    }
+
     $patient->setTitleObjet($supportID, $codes.' / '.$_POST['regleFacture'].'€');
 
-    if (!isset($_POST['objetID']) or $_POST['objetID']==='') {
-        $debug='';
-        //template
-        $template="pht-ligne-reglement";
-        $patient=new msPeople();
-        $patient->setToID($_POST['patientID']);
+    // générer le retour
+    $debug='';
+    //template
+    $template="pht-ligne-reglement";
+    $patient=new msPeople();
+    $patient->setToID($_POST['patientID']);
+    if (isset($_POST['objetID']) and $_POST['objetID']!=='') {
+        $ligneHisto=$patient->getHistorique($_POST['objetID']);
+        $p['cs']=array_pop($ligneHisto)[0];
+    } else {
         $p['cs']=$patient->getToday("limit 1")[0];
     }
 

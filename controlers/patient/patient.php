@@ -46,6 +46,7 @@ if ($externe=$patient->isExterne() and
     }
 
 $p['page']['patient']['administrativeDatas']=$patient->getAdministrativesDatas();
+$p['page']['patient']['administrativeDatas']['birthdate']['ageFormats']=$patient->getAgeFormats();
 $p['page']['patient']['administrativeDatas']['birthdate']['age']=$patient->getAge();
 
 //cas où le patient est externe et sans relation connue
@@ -86,7 +87,7 @@ if ($externe and !$internePatient) {
         //sinon, on affiche la page de recherche patient
         $p['page']['patient']['administrativeDatas']=$patient->getSimpleAdminDatasByName();
         $p['page']['porp']="externe";
-        include $p['config']['homeDirectory'].'controlers/rechercher/patients.php';
+        include $p['homepath'].'controlers/rechercher/patients.php';
         $match['target']='';
         return;
     }
@@ -107,56 +108,34 @@ $p['page']['patient']['today']=$patient->getToday();
 //historique complet des consultation du patient
 $p['page']['patient']['historique']=$patient->getHistorique();
 
+//les ALD du patient
+$p['page']['patient']['ALD']=$patient->getALD();
+
 //les certificats
 $certificats=new msData();
 $certificats->setModules(['base', $p['user']['module']]);
 
-if($p['page']['modelesCertif']=$certificats->getDataTypesFromCatName('catModelesCertificats', ['id','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor' ])) {
-  foreach($p['page']['modelesCertif'] as $k=>$v) {
-    if(isset($v['onlyfor'])) {
-      $p['page']['modelesCertif'][$k]['onlyfor']=explode(',', $v['onlyfor']);
-      if(is_array($p['page']['modelesCertif'][$k]['notfor'])) {
-        if(count(array_filter($p['page']['modelesCertif'][$k]['onlyfor']))>0) {
-          if(!in_array($p['user']['id'], $p['page']['modelesCertif'][$k]['onlyfor'])) {
-            unset($p['page']['modelesCertif'][$k]);
-          }
-        }
-      }
-    }
-    if(isset($v['notfor'])) {
-      $p['page']['modelesCertif'][$k]['notfor']=explode(',', $v['notfor']);
-      if(is_array($p['page']['modelesCertif'][$k]['notfor'])) {
-        if(in_array($p['user']['id'], $p['page']['modelesCertif'][$k]['notfor'])) {
-          unset($p['page']['modelesCertif'][$k]);
-        }
-      }
-    }
-  }
+if($p['page']['modelesCertif']=$certificats->getDataTypesFromCatName('catModelesCertificats', ['id','name','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor' ])) {
+  $certificats->applyRulesOnlyforNotforOnArray($p['page']['modelesCertif'], $p['user']['id']);
 }
 //les courriers
-if($p['page']['modelesCourrier']=$certificats->getDataTypesFromCatName('catModelesCourriers', ['id','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor'])) {
-  foreach($p['page']['modelesCourrier'] as $k=>$v) {
-    if(isset($v['onlyfor'])) {
-      $p['page']['modelesCourrier'][$k]['onlyfor']=explode(',', $v['onlyfor']);
-      if(is_array($p['page']['modelesCourrier'][$k]['notfor'])) {
-        if(count(array_filter($p['page']['modelesCourrier'][$k]['onlyfor']))>0) {
-          if(!in_array($p['user']['id'], $p['page']['modelesCourrier'][$k]['onlyfor'])) {
-            unset($p['page']['modelesCourrier'][$k]);
-          }
-        }
-      }
-    }
-    if(isset($v['notfor'])) {
-      $p['page']['modelesCourrier'][$k]['notfor']=explode(',', $v['notfor']);
-      if(is_array($p['page']['modelesCourrier'][$k]['notfor'])) {
-        if(in_array($p['user']['id'], $p['page']['modelesCourrier'][$k]['notfor'])) {
-          unset($p['page']['modelesCourrier'][$k]);
-        }
-      }
-    }
-  }
+if($p['page']['modelesCourrier']=$certificats->getDataTypesFromCatName('catModelesCourriers', ['id','name','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor'])) {
+  $certificats->applyRulesOnlyforNotforOnArray($p['page']['modelesCourrier'], $p['user']['id']);
+}
+
+//les doc à signer pour les imprimer si besoin
+if($p['page']['modelesDocASigner']=$certificats->getDataTypesFromCatName('catModelesDocASigner', ['id','name','label', 'validationRules as onlyfor', 'validationErrorMsg as notfor'])) {
+  $certificats->applyRulesOnlyforNotforOnArray($p['page']['modelesDocASigner'], $p['user']['id']);
 }
 
 //les correspondants et liens familiaux
 $p['page']['correspondants']=$patient->getRelationsWithPros();
 $p['page']['liensFamiliaux']=$patient->getRelationsWithOtherPatients();
+
+// Transmissions
+if($p['config']['transmissionsPeutCreer'] == 'true') {
+  $trans = new msTransmissions();
+  $trans->setUserID($p['user']['id']);
+  $p['page']['transmissionsListeDestinatairesPossibles']=$trans->getTransmissionDestinatairesPossibles();
+  $p['page']['transmissionsListeDestinatairesDefaut']=explode(',', $p['config']['transmissionsDefautDestinataires']);
+}

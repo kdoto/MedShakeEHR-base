@@ -29,6 +29,7 @@ use Dompdf\Dompdf;
  * pour générer un PDF à sauver ou à afficher.
  *
  * @author Bertrand Boutillier <b.boutillier@gmail.com>
+ * @contrib fr33z00 <https://github.com/fr33z00>
  */
 
 
@@ -54,6 +55,12 @@ class msPDF
     private $_pageHeader;
     /** @var string footer du pdf */
     private $_pageFooter;
+    /** @var string lap : mode d'impression anonyme */
+    private $_anonymeMode=FALSE;
+    /** @var string optimiser (reduction de taille) avec GhostScript */
+    private $_optimizeWihtGS=FALSE;
+    /** @var string dossier de template à utiliser */
+    private $_templatesPdfFolder;
 
 /**
  * Définir le corps du PDF : datas envoyées en POST
@@ -88,6 +95,8 @@ class msPDF
  */
     public function setFromID($v)
     {
+
+        $this->_templatesPdfFolder = msConfiguration::getParameterValue('templatesPdfFolder', $user=array('id'=>$v, 'module'=>''));
         return $this->_fromID = $v;
     }
 
@@ -137,12 +146,28 @@ class msPDF
     }
 
 /**
+ * Définir le mode d'impression auteur anonyme.
+ */
+    public function setAnonymeMode()
+    {
+        return $this->_anonymeMode = TRUE;
+    }
+
+/**
  * Obtenir le contenu final complet du PDF
  * @return string HTML contenu final complet
  */
     public function getContenuFinal()
     {
         return $this->_contenuFinalPDF;
+    }
+
+/**
+ * Définir le fait d'optimiser ou non le PDF final avec GhostScript
+ * @param boolean $v FALSE/TRUE
+ */
+    public function setOptimizeWithGS($v) {
+      return $this->_optimizeWihtGS = $v;
     }
 
 /**
@@ -156,9 +181,11 @@ class msPDF
         }
         $doc = new msObjet();
         $data=$doc->getCompleteObjetDataByID($this->_objetID);
-        $this->_fromID=$data['fromID'];
+        $this->setFromID($data['fromID']);
         $this->_toID=$data['toID'];
-        if ($data['groupe']=="courrier") {
+        if($data['name'] == 'lapOrdonnance') {
+            $this->_type="ordoLAP";
+        } elseif ($data['groupe']=="courrier") {
             $this->_body=msTools::unbbcodifier($data['value']);
             $this->_type="courrier";
             $this->_modeleID=$data['typeID'];
@@ -222,8 +249,16 @@ class msPDF
 
         $folder=msStockage::getFolder($this->_objetID);
         msTools::checkAndBuildTargetDir($p['config']['stockageLocation'].$folder.'/');
+        $finalFile = $p['config']['stockageLocation'].$folder.'/'.$this->_objetID.'.pdf';
 
-        file_put_contents($p['config']['stockageLocation'].$folder.'/'.$this->_objetID.'.pdf', $pdf);
+        if($this->_optimizeWihtGS == TRUE and msTools::commandExist('gs')) {
+          $tempFile = $p['config']['workingDirectory'].$this->_objetID.'.pdf';
+          file_put_contents($tempFile, $pdf);
+          exec('gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/prepress -sOutputFile='.$finalFile.' '.$tempFile);
+          unlink($tempFile);
+        } else {
+          file_put_contents($finalFile, $pdf);
+        }
 
         //sauver la copie en base
         $this->_savePrinted();
@@ -245,7 +280,9 @@ class msPDF
         'value'=>$this->_contenuFinalPDF
       );
 
-      // test préalable car pour courrier dont le body ets injecté en POST, ca ne fonctionne pas.
+      if($this->_anonymeMode) $data['anonyme'] = 'y';
+
+      // test préalable car pour courrier dont le body est injecté en POST, ca ne fonctionne pas.
       if(isset($p['page']['courrier'])) {
         $data['serializedTags']=serialize($p['page']['courrier']);
       }
@@ -302,7 +339,132 @@ class msPDF
             elseif ($this->_type=='ordo') {
                 $this->_makeBodyForOrdo();
             }
+            //si c'est une ordo LAP
+            elseif ($this->_type=='ordoLAP') {
+                $this->_makeBodyForOrdoLAP();
+            }
         }
+    }
+
+/**
+ * Construire le corps du PDF pour une ordonnance
+ * @return void
+ */
+    private function _makeBodyForOrdoLAP()
+    {
+      global $p;
+
+      // sortir les infos patient
+      $courrier = new msCourrier();
+      $courrier->setObjetID($this->_objetID);
+      $p['page']['courrier']=$courrier->getOrdoData();
+
+      // sortir data ordonnance
+      $ordo = new msLapOrdo;
+      $ordo->setOrdonnanceID($this->_objetID);
+      $tabOrdo=$ordo->getOrdonnance();
+      $modePrint='standard';
+
+      if(isset($tabOrdo['ordoMedicsALD'])) {
+        $modePrint='ald';
+        foreach($tabOrdo['ordoMedicsALD'] as $k=>$l) {
+          if(count($l['medics']) > 1) {
+            $p['page']['courrier']['medoc']['ald'][$k]=$l['ligneData']['voieUtilisee'].' - '.$l['ligneData']['dureeTotaleHuman']."\n";
+            foreach($l['medics'] as $km=>$m) {
+              $p['page']['courrier']['medoc']['ald'][$k].= ($km+1) .'- '.$m['nomUtileFinal'];
+              if($m['isNPS'] == 'true') {
+                $p['page']['courrier']['medoc']['ald'][$k].= ' [non substituable';
+                if($m['motifNPS'] != '') $p['page']['courrier']['medoc']['ald'][$k].=' - '.$m['motifNPS'];
+                $p['page']['courrier']['medoc']['ald'][$k].= ']';
+              }
+              $p['page']['courrier']['medoc']['ald'][$k].= "\n".implode("\n", $m['posoHumanCompleteTab'])."\n";
+              if($p['config']['lapPrintAllergyRisk'] == 'true' and isset($m['risqueAllergique'])) {
+                if($m['risqueAllergique']) $p['page']['courrier']['medoc']['ald'][$k].= "Un risque théorique d'allergie ou d'intolérance vous concernant est connu pour ce traitement.\n";
+              }
+            }
+            if(!empty(trim($l['ligneData']['consignesPrescription']))) {
+              $p['page']['courrier']['medoc']['ald'][$k].= $l['ligneData']['consignesPrescription']."\n";
+            }
+          } else {
+            $m=$l['medics'][0];
+            $p['page']['courrier']['medoc']['ald'][$k]=$m['nomUtileFinal'];
+            $p['page']['courrier']['medoc']['ald'][$k].=" - ".$l['ligneData']['voieUtilisee'];
+            if($m['isNPS'] == 'true') {
+              $p['page']['courrier']['medoc']['ald'][$k].= ' - [non substituable';
+              if($m['motifNPS'] != '') $p['page']['courrier']['medoc']['ald'][$k].=' - '.$m['motifNPS'];
+              $p['page']['courrier']['medoc']['ald'][$k].= ']';
+            }
+            $p['page']['courrier']['medoc']['ald'][$k].= "\n".implode("\n", $m['posoHumanCompleteTab'])."\n";
+            if($p['config']['lapPrintAllergyRisk'] == 'true' and isset($m['risqueAllergique'])) {
+              if($m['risqueAllergique']) $p['page']['courrier']['medoc']['ald'][$k].= "Un risque théorique d'allergie ou d'intolérance vous concernant est connu pour ce traitement.\n";
+            }
+            if(!empty(trim($l['ligneData']['consignesPrescription']))) {
+              $p['page']['courrier']['medoc']['ald'][$k].= $l['ligneData']['consignesPrescription']."\n";
+            }
+          }
+        }
+      }
+
+      if(isset($tabOrdo['ordoMedicsG'])) {
+        foreach($tabOrdo['ordoMedicsG'] as $k=>$l) {
+          if(count($l['medics']) > 1) {
+            $p['page']['courrier']['medoc']['standard'][$k]=$l['ligneData']['voieUtilisee'].' - '.$l['ligneData']['dureeTotaleHuman']."\n";
+            foreach($l['medics'] as $km=>$m) {
+              $p['page']['courrier']['medoc']['standard'][$k].= ($km+1) .'- '.$m['nomUtileFinal'];
+              if($m['isNPS'] == 'true') {
+                $p['page']['courrier']['medoc']['standard'][$k].= ' [non substituable';
+                if($m['motifNPS'] != '') $p['page']['courrier']['medoc']['standard'][$k].=' - '.$m['motifNPS'];
+                $p['page']['courrier']['medoc']['standard'][$k].= ']';
+              }
+              $p['page']['courrier']['medoc']['standard'][$k].= "\n".implode("\n", $m['posoHumanCompleteTab'])."\n";
+              if($p['config']['lapPrintAllergyRisk'] == 'true' and isset($m['risqueAllergique'])) {
+                if($m['risqueAllergique']) $p['page']['courrier']['medoc']['standard'][$k].= "Un risque théorique d'allergie ou d'intolérance vous concernant est connu pour ce traitement.\n";
+              }
+            }
+            if(!empty(trim($l['ligneData']['consignesPrescription']))) {
+              $p['page']['courrier']['medoc']['standard'][$k].= $l['ligneData']['consignesPrescription']."\n";
+            }
+          } else {
+            $m=$l['medics'][0];
+            $p['page']['courrier']['medoc']['standard'][$k]=$m['nomUtileFinal'];
+            $p['page']['courrier']['medoc']['standard'][$k].=" - ".$l['ligneData']['voieUtilisee'];
+            if($m['isNPS'] == 'true') {
+              $p['page']['courrier']['medoc']['standard'][$k].= ' - [non substituable';
+              if($m['motifNPS'] != '') $p['page']['courrier']['medoc']['standard'][$k].=' - '.$m['motifNPS'];
+              $p['page']['courrier']['medoc']['standard'][$k].= ']';
+            }
+            $p['page']['courrier']['medoc']['standard'][$k].= "\n".implode("\n", $m['posoHumanCompleteTab'])."\n";
+            if($p['config']['lapPrintAllergyRisk'] == 'true' and isset($m['risqueAllergique'])) {
+              if($m['risqueAllergique']) $p['page']['courrier']['medoc']['standard'][$k].= "Un risque théorique d'allergie ou d'intolérance vous concernant est connu pour ce traitement.\n";
+            }
+            if(!empty(trim($l['ligneData']['consignesPrescription']))) {
+              $p['page']['courrier']['medoc']['standard'][$k].= $l['ligneData']['consignesPrescription']."\n";
+            }
+          }
+        }
+      }
+
+      //si on sort en mode ald alors on va annuler les header et footer standard
+      if ($modePrint=='ald') {
+        $this->_pageHeader=$this->_pageFooter='';
+        if($this->_anonymeMode) {
+          $p['page']['courrier']['printModel']='ordonnanceAnonymeALD.html.twig';
+        } else {
+          $p['page']['courrier']['printModel']=$p['config']['templateOrdoALD'];
+        }
+      } else {
+        if($this->_anonymeMode) {
+          $this->_pageHeader=$this->_pageFooter='';
+          $p['page']['courrier']['printModel']='ordonnanceAnonyme.html.twig';
+        } else {
+          $this->_pageHeader= $this->makeWithTwig($p['config']['templateOrdoHeadAndFoot']);
+          $p['page']['courrier']['printModel']=$p['config']['templateOrdoBody'];
+        }
+      }
+
+      //on génère le body avec twig
+      $this->_body =  $this->makeWithTwig($p['page']['courrier']['printModel']);
+
     }
 
 /**
@@ -364,7 +526,7 @@ class msPDF
     }
 
 /**
- * Construire le coprs du PDF pour un compte rendu
+ * Construire le corps du PDF pour un compte rendu
  * @return void
  */
     private function _makeBodyForCr()
@@ -424,15 +586,49 @@ class msPDF
     public function makeWithTwig($template)
     {
         global $p;
-
+        if(isset($this->_templatesPdfFolder)) {
+          $templatesPdfFolder=$this->_templatesPdfFolder;
+        } else {
+          $templatesPdfFolder=$p['config']['templatesPdfFolder'];
+        }
         // les variables d'environnement twig
         if(isset($p['config']['twigEnvironnementCache'])) $twigEnvironment['cache']=$p['config']['twigEnvironnementCache']; else $twigEnvironment['cache']=false;
         if(isset($p['config']['twigEnvironnementAutoescape'])) $twigEnvironment['autoescape']=$p['config']['twigEnvironnementAutoescape']; else $twigEnvironment['autoescape']=false;
 
-        $loaderPDF = new Twig_Loader_Filesystem($p['config']['templatesPdfFolder']);
+        $loaderPDF = new Twig_Loader_Filesystem($templatesPdfFolder);
         $twigPDF = new Twig_Environment($loaderPDF, $twigEnvironment);
         $twigPDF->getExtension('Twig_Extension_Core')->setDateFormat('d/m/Y', '%d days');
         $twigPDF->getExtension('Twig_Extension_Core')->setTimezone('Europe/Paris');
         return $twigPDF->render($template, $p);
     }
+
+/**
+ * Obtenir un duplicata du pdf
+ * @return void
+ */
+    public function getDuplicata() {
+      global $p;
+
+      $pdf = new msStockage;
+      $pdf->setObjetID($this->_objetID);
+      if (!$pdf->testDocExist()) {
+        $this->makePDFfromObjetID();
+        $this->savePDF();
+      }
+      $original = $pdf->getPathToDoc();
+
+      msTools::checkAndBuildTargetDir($p['config']['workingDirectory'].$p['user']['id'].'/');
+      $tempfile=$p['config']['workingDirectory'].$p['user']['id'].'/'.time().'.pdf';
+      $watermark=$p['homepath'].'templates/duplicata.pdf';
+      system("pdftk $original background $watermark output $tempfile dont_ask", $errcode);
+      if (!$errcode && $ih=fopen($tempfile, 'r')) {
+          header('Content-Type: application/pdf');
+          fpassthru($ih);
+          fclose($ih);
+      } else {
+          echo "Problème de génération du duplicata";
+      }
+      unlink($tempfile);
+    }
+
 }

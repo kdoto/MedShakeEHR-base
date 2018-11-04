@@ -23,27 +23,28 @@
  # Template > patient : formulaire de règlement
  #
  # @author Bertrand Boutillier <b.boutillier@gmail.com>
+ # @contrib fr33z00 <https://github.com/fr33z00>
  #}
 
 {% import "macroForm.html.twig" as f %}
-<div class="jumbotron">
+<div class="jumbotron col-md-12">
     <button id="cleanNewReglement" type="button" class="close" aria-label="Close">
         <span aria-hidden="true">&times;</span>
     </button>
 
-    {% if page.formActes.prevalue %}
+    {% if page.form.addHidden.objetID > 0 %}
         <h3>Édition du règlement</h3>
     {% else %}
         <h3>Nouveau règlement</h3>
     {% endif %}
 
-    <div class="row" style="margin-bottom : 30px">
+    <div class="row mb-3">
         {% for k, v in page.menusActes %}
             <div class="col-md-6">
                 <div class="form-group">
                     <label class="control-label" for="selectActe{{ loop.index }}">{{ k }}
                     </label>
-                    <select class="form-control selectActeStarter" id="selectActe{{ loop.index }}ID" name="selectActe{{ loop.index }}" autocomplete="off">
+                    <select class="form-control custom-select selectActeStarter" id="selectActe{{ loop.index }}ID" name="selectActe{{ loop.index }}" autocomplete="off">
                         <option value=''></option>
                         {% for val in v %}
                             <option value="{{ val.id }}"
@@ -60,20 +61,44 @@
         {% endfor %}
     </div>
 
-    <div id="detFacturation" class="panel panel-default" style="display: none;">
-      <div class="panel-heading">Détails par acte dans le règlement sélectionné</div>
+    <div id="detFacturation" class="card col-md-12 px-0 mb-3" style="display: none;">
+      <div class="card-header text-center gras">Facturation à appliquer</div>
 
-      <table class="table table-condensed">
+      <table class="table table-sm mb-0">
         <thead>
-          <th>acte</th>
-          <th>%</th>
-          <th>tarif</th>
-          <th>depassement</th>
-          <th>total</th>
+          <tr>
+            <th class="">acte</th>
+            <th class="text-left"></th>
+            <th class="text-left" {% if page.form.addHidden.reglementForm == 'baseReglementLibre' %} style="display : none"{% else %} style="width : 100px;"{% endif %}>code asso.</th>
+            <th class="text-center">base</th>
+            {% if page.secteur != '' %}
+              <th class="pourcents text-center" style="width : 100px;">%</th>
+            {% endif %}
+            <th class="text-center" {% if page.form.addHidden.reglementForm == 'baseReglementLibre' %} style="display : none"{% else %} style="width : 120px;"{% endif %}>modif CCAM</th>
+            <th class="text-center" {% if page.form.addHidden.reglementForm == 'baseReglementLibre' %} style="display : none"{% endif %}></th>
+            <th class="text-center"></th>
+            {% if page.secteur == '' %}
+              <th class="text-center" style="width : 120px;">modulation</th>
+            {% else %}
+              <th class="text-center" style="width : 120px;">dépassement</th>
+            {% endif %}
+            <th class="text-right">total</th>
+            <th class=""></th>
+          </tr>
         </thead>
+
         <tbody></tbody>
       </table>
     </div>
     {{ f.formbuilder(page.form , page.formIN ) }}
+
+
+    {% if page.form.addHidden.objetID > 0 %}
+    <script>
+      setTimeout(function() {
+        construireTabActesEdition();
+      }, 200);
+      </script>
+    {% endif %}
 
 </div>

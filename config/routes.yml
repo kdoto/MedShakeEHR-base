@@ -60,24 +60,32 @@ peopleEdit: ['GET', '/[patient|pro:porp]/edit/[i:patient]/', 'people/peopleEdit'
 peopleListDeleted: ['GET', '/people/deleted/', 'people/peopleListDeleted']
 
 # relations
-peopleRelations: ['GET', '/patient/relations/[i:patient]/', 'people/peopleRelations']
+peopleRelations: ['GET|POST', '/patient/relations/[i:patient]/', 'people/peopleRelations']
 
 # pro : voir fiche praticien
 proView: ['GET', '/pro/[i:proID]/', 'people/proView']
+
+# lap
+lapAjax: ['GET|POST', '/lap/ajax/[a:m]/', 'lap/actions/lapAjax']
+lapMonographie: ['GET|POST', '/lap/monographie/[i:spe]/[a:section]?/', 'lap/lapMonographie']
+lapMonoAnnexes: ['GET|POST', '/lap/monographie/[sub|doc|ei|eis:mode]/[i:spe]/[i:fiche]?/[i:type]?/', 'lap/lapMonoAnnexes']
+lapOutils: ['GET|POST', '/outils/lap/', 'lap/lapOutilsIndex']
 
 #dossier patient
 patientAjaxIgnoreEmpty: ['GET|POST', '/patient/ajax/[saveCsForm:m]/[ignoreEmpty:ignoreEmpty]/', 'patient/actions/patientAjax']
 patientAjax: ['GET|POST', '/patient/ajax/[a:m]/', 'patient/actions/patientAjax']
 patientActions: ['GET|POST', '/patient/actions/[a:m]/[i:patientID]?/[i:objetID]?/', 'patient/actions/patientActions']
+patientTabs: ['GET|POST', '/patient/[i:patientID]/tab/[a:tab]/', 'patient/patientTabs']
 patient: ['GET', '/patient/[i:patient]/', 'patient/patient']
 
 #dicom
 dicomActions: ['GET|POST', '/dicom/actions/[a:m]/', 'dicom/actions/dicomActions']
-dcViewPatient: ['GET', '/dicom/[i:patientID]/', 'dicom/viewPatient']
+dcViewPatient: ['GET|POST', '/dicom/[i:patientID]/', 'dicom/viewPatient']
 dcViewStudy: ['GET', '/dicom/[i:patientID]/study/[:dcStudyID]/', 'dicom/viewStudy']
 
 #logs
 logsActions: ['GET|POST', '/logs/actions/[a:m]/', 'logs/actions/logsActions']
+logsAjax: ['GET|POST', '/logs/ajax/[a:m]/', 'logs/actions/logsAjax']
 logs: ['GET', '/logs/[i:patient]?/[i:typeID]?/[i:instance]?/', 'logs/logs']
 historiquePrint: ['GET', '/logs/historiquePrint/[i:objetID]/', 'logs/historiquePrint']
 historiqueMailSend: ['GET', '/logs/historiqueMailSend/[i:objetID]/', 'logs/historiqueMailSend']
@@ -86,17 +94,21 @@ historiqueMailSendToPatient: ['GET', '/logs/historiqueMailSendToPatient/[i:patie
 historiqueRappelsSMS: ['GET|POST', '/logs/historiqueRappelsSMS/[:date]?/', 'logs/historiqueRappelsSMS']
 historiqueRappelsMail: ['GET|POST', '/logs/historiqueRappelsMail/[:date]?/', 'logs/historiqueRappelsMail']
 logsAgenda: ['GET', '/logs/agenda/[i:agenda]?/[i:event]?/', 'logs/logsAgenda']
+historiqueAccesHttp: ['GET', '/logs/accesHttp/', 'logs/historiqueAccesHttp']
 
 #pdf
-makePDFCr: ['GET|POST', '/makepdf/[i:patient]/[cr|ordo:printType]/[i:examen]/', 'print/pdfMake']
+makePDFCr: ['GET|POST', '/makepdf/[i:patient]/[cr|ordo|ordoLAP:printType]/[i:examen]/[anonyme:anonyme]?/', 'print/pdfMake']
 makePDFCourrier: ['GET|POST', '/makepdf/[i:patient]/[courrier:printType]/[i:modele]/[i:examen]?/', 'print/pdfMake']
 showPDF: ['GET|POST', '/showpdf/[i:objetID]/', 'print/pdfShow']
+duplicataPDF: ['GET|POST', '/duplicata/[i:objetID]/', 'print/pdfDuplicata']
+pdfMakeFromHistory: ['GET|POST', '/makepdf/[i:patient]/fromHistory/[i:versionID]/', 'print/pdfMakeFromHistory']
 
 #fichier (extraire vers navigateur)
 fichierSendToNav: ['GET|POST', '/fichier/[i:fichierID]/', 'fichier/fichierSendToNav']
 
 #compta
 comptaActions: ['POST', '/compta/actions/[a:m]/', 'compta/actions/comptaActions']
+comptaAjax: ['POST', '/compta/ajax/[a:m]/', 'compta/actions/comptaAjax']
 comptaToday: ['GET|POST', '/compta/aujourdhui/', 'compta/today']
 compta: ['GET|POST', '/compta/', 'compta/compta']
 comptaMemoTarif: ['GET', '/compta/memo-tarifs/[i:user]?/', 'compta/comptaMemoTarifs']
@@ -105,6 +117,11 @@ comptaMemoTarif: ['GET', '/compta/memo-tarifs/[i:user]?/', 'compta/comptaMemoTar
 inboxAjax: ['POST', '/inbox/ajax/[a:m]/', 'inbox/actions/inboxAjax']
 inboxActions: ['POST|GET', '/inbox/actions/[a:m]/[i:mailID]?/', 'inbox/actions/inboxActions']
 inbox: ['GET|POST', '/inbox/', 'inbox/inbox']
+
+#transmissions
+transmissionsAjax: ['GET|POST', '/transmissions/ajax/[a:m]/', 'transmissions/actions/transmissionsAjax']
+transmissionsIndex: ['GET', '/transmissions/[recues|envoyees:transBox]?/', 'transmissions/transmissionsIndex']
+transmissionsTransmission: ['GET', '/transmission/[i:transmission]/', 'transmissions/transmissionsTransmission']
 
 #outils
 outilsRouletteObs: ['POST|GET', '/outils/roulette-obstetricale/', 'outils/outilsRouletteObs']
@@ -147,6 +164,7 @@ configShowTagsForCr: ['GET', '/configuration/configShowTagsForCr/[i:objetID]/', 
 configDefaultParams: ['GET', '/configuration/configuration-globale/', 'configuration/configDefaultParams']
 configCheckTech: ['GET', '/configuration/check-directory/', 'configuration/configCheckDirectory']
 configCleanSession: ['GET', '/configuration/cleanSession/', 'configuration/configCleanSession']
+configExecUpgradeScript: ['GET', '/configuration/exec/[a:module]/[*:script]/', 'configuration/configExecUpgradeScript']
 
 # configuration Users
 configUsersList: ['GET', '/configuration/users/', 'configuration/configUsersList']
@@ -160,6 +178,10 @@ configUpdates: ['GET', '/configuration/applyUpdates/', 'configuration/configAppl
 
 # configuration modules
 configModules: ['GET', '/configuration/modules/', 'configuration/configModules']
+configExportModuleToSQL: ['GET', '/configuration/modules/export/[a:moduleName]/', 'configuration/configExportModuleToSQL']
+
+# configuration LAP
+configLapGetSAMS: ['GET', '/configuration/refreshSams/', 'configuration/configLapGetSAMS']
 
 # User
 userAjax: ['POST|GET', '/user/ajax/[a:m]/', 'user/actions/userAjax']

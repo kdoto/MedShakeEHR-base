@@ -26,7 +26,7 @@
  * @author fr33z00 <https://github.com/fr33z00
  */
 
-if (!msUser::checkUserIsAdmin()) {die("Erreur: vous n'êtes pas administrateur");} 
+if (!msUser::checkUserIsAdmin()) {die("Erreur: vous n'êtes pas administrateur");}
 
 $fichier=$_FILES['file'];
 $mimetype=msTools::getmimetype($fichier['tmp_name']);
@@ -36,18 +36,23 @@ if ($mimetype!='application/zip') {
 if (!is_writable($p['config']['webDirectory'])) {
     die("Erreur: www-data n'a pas les droits d'écriture sur le dossier ".$p['config']['webDirectory']);
 }
-if (!is_writable($p['config']['homeDirectory'])) {
-    die("Erreur: www-data n'a pas les droits d'écriture sur le dossier ".$p['config']['homeDirectory']);
+if (!is_writable($p['homepath'])) {
+    die("Erreur: www-data n'a pas les droits d'écriture sur le dossier ".$p['homepath']);
 }
 $zip = new ZipArchive;
 if ($zip->open($fichier['tmp_name'])) {
     if ($zip->getFromName(".MedShakeEHR")!==false) {
-        msSQL::sqlQuery("UPDATE system SET value='maintenance' WHERE name='state' and groupe='system'");
-        if ($zip->extractTo($p['config']['homeDirectory'])) {
+        $dataMaintenance = array(
+          'name'=>'state',
+          'value'=>'maintenance',
+          'groupe'=>'system'
+        );
+        msSQL::sqlInsert('system', $dataMaintenance);
+        if ($zip->extractTo($p['homepath'])) {
             $zip->close();
-            if ($p['config']['webDirectory']!=$p['config']['homeDirectory'].'public_html/') {
-                exec('cp -r '.$p['config']['homeDirectory'].'public_html/* '.$p['config']['webDirectory']);
-                exec('rm -rf '.$p['config']['homeDirectory'].'public_html/');
+            if ($p['config']['webDirectory']!=$p['homepath'].'public_html/') {
+                exec('cp -r '.$p['homepath'].'public_html/* '.$p['config']['webDirectory']);
+                exec('rm -rf '.$p['homepath'].'public_html/');
             }
             die("ok");
         }
